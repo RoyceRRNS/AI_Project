@@ -1,0 +1,131 @@
+{
+  "summary": {
+    "hit_at_1": 1.0,
+    "hit_at_5": 1.0,
+    "mrr": 1.0,
+    "page_accuracy": 1.0,
+    "mean_latency_ms": 957.1
+  },
+  "questions": [
+    {
+      "question": "Why does the vanishing gradient problem happen in RNNs and how do LSTMs fix it?",
+      "expected_pdf": "Lecture_07_RNNs.pdf",
+      "expected_page": 1,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_07_RNNs.pdf",
+      "top_section": "Lecture 7: Recurrent Neural Networks \u2013 4 Long Short-Term Memory",
+      "top_score": 0.9985,
+      "not_found": false,
+      "latency_ms": 6024.9
+    },
+    {
+      "question": "What are the KKT conditions and what does complementary slackness imply?",
+      "expected_pdf": "Lecture_04_SVMs.pdf",
+      "expected_page": 2,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_04_SVMs.pdf",
+      "top_section": "3.1 Lagrange Duality \u2013 5 Soft Margin and Regularization",
+      "top_score": 0.9788,
+      "not_found": false,
+      "latency_ms": 428.3
+    },
+    {
+      "question": "What does Lemma 3.2 state?",
+      "expected_pdf": "Lecture_04_SVMs.pdf",
+      "expected_page": 2,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_04_SVMs.pdf",
+      "top_section": "3.1 Lagrange Duality \u2013 5 Soft Margin and Regularization",
+      "top_score": 0.6556,
+      "not_found": false,
+      "latency_ms": 470.7
+    },
+    {
+      "question": "State Bayes' theorem in terms of the prior and the likelihood.",
+      "expected_pdf": "Lecture_02_Probability_Slides.pdf",
+      "expected_page": 4,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_02_Probability_Slides.pdf",
+      "top_section": "Bayes' Theorem",
+      "top_score": 0.9794,
+      "not_found": false,
+      "latency_ms": 524.5
+    },
+    {
+      "question": "Does zero covariance imply that two random variables are independent?",
+      "expected_pdf": "Lecture_02_Probability_Slides.pdf",
+      "expected_page": 5,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_02_Probability_Slides.pdf",
+      "top_section": "Independence",
+      "top_score": 0.9983,
+      "not_found": false,
+      "latency_ms": 490.9
+    },
+    {
+      "question": "How is the geometric margin related to the functional margin?",
+      "expected_pdf": "Lecture_04_SVMs.pdf",
+      "expected_page": 1,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_04_SVMs.pdf",
+      "top_section": "Lecture 4: Support Vector Machines \u2013 3 The Optimal Margin Classifier",
+      "top_score": 0.9235,
+      "not_found": false,
+      "latency_ms": 289.4
+    },
+    {
+      "question": "Which kernel corresponds to an infinite-dimensional feature space?",
+      "expected_pdf": "Lecture_04_SVMs.pdf",
+      "expected_page": 3,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_04_SVMs.pdf",
+      "top_section": "3.1 Lagrange Duality \u2013 5 Soft Margin and Regularization",
+      "top_score": 0.8591,
+      "not_found": false,
+      "latency_ms": 294.4
+    },
+    {
+      "question": "How does gradient clipping deal with exploding gradients?",
+      "expected_pdf": "Lecture_07_RNNs.pdf",
+      "expected_page": 1,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_07_RNNs.pdf",
+      "top_section": "Lecture 7: Recurrent Neural Networks \u2013 4 Long Short-Term Memory",
+      "top_score": 0.9592,
+      "not_found": false,
+      "latency_ms": 284.1
+    },
+    {
+      "question": "What is the variance of a Bernoulli random variable?",
+      "expected_pdf": "Lecture_02_Probability_Slides.pdf",
+      "expected_page": 7,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Lecture_02_Probability_Slides.pdf",
+      "top_section": "Common Distributions",
+      "top_score": 0.3828,
+      "not_found": false,
+      "latency_ms": 488.9
+    },
+    {
+      "question": "What happens if the learning rate alpha is too large in gradient descent?",
+      "expected_pdf": "Handwritten_Gradient_Descent.pdf",
+      "expected_page": 1,
+      "rank": 1,
+      "page_hit": true,
+      "top_pdf": "Handwritten_Gradient_Descent.pdf",
+      "top_section": "Gradient Descent- my notes",
+      "top_score": 0.9967,
+      "not_found": false,
+      "latency_ms": 274.7
+    }
+  ]
+}
