@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime data (uploaded PDFs, SQLite, vector store) and test/benchmark storage
+/storage/
+/storage-*/
+tests/fixtures/generated/
+
+# Frontend build and test output
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/public/pdfjs/
+frontend/e2e/.fixtures/
+frontend/.vitest/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+~$*

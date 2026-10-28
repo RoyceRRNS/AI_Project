@@ -1,0 +1,15 @@
+{
+  "_source": "Measured on 2026-10-28: benchmarks/results/*.json, live test run, quiz-yield and grounding probes (RTX 4070 Laptop GPU, Qwen 2.5 7B via Ollama).",
+  "ingest": { "documents": 4, "pages": 13, "seconds": 41, "parents": 12, "children": 23 },
+  "retrieval": {
+    "metrics": ["hit_at_1", "hit_at_5", "mrr", "page_accuracy"],
+    "offline": [1.0, 1.0, 1.0, 0.9],
+    "live_v1": [0.9, 0.9, 0.9, 0.9],
+    "live_final": [1.0, 1.0, 1.0, 1.0]
+  },
+  "latency_ms_warm": 268,
+  "latency_ms_first": 10745,
+  "grounding": { "coverage_before": 0.286, "coverage_after": 1.0, "valid_before": 2, "valid_after": 6, "invalid_after": 0, "mismatch_detected": 1 },
+  "quiz": { "before_evidence_ids": 0.333, "evidence_ids_no_repair": 0.667, "after": 1.0, "after_n": 9, "after_seconds": 320, "repairs": { "evidence_reselected": 2, "rationale_filled": 2 } },
+  "tests": { "backend": 289, "frontend": 56, "browser": 9, "live": 5 }
+}

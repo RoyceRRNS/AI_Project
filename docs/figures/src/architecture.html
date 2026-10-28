@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #ffffff; font-family: "Segoe UI", Arial, sans-serif; }
+  svg text { font-family: "Segoe UI", Arial, sans-serif; }
+  .lane { font-size: 13px; font-weight: 700; letter-spacing: 2px; fill: #0f766e; }
+  .t { font-size: 14px; font-weight: 700; fill: #0f172a; }
+  .s { font-size: 11.5px; fill: #475569; }
+  .box { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1.2; }
+  .hot { fill: #ccfbf1; stroke: #14b8a6; }
+  .llm { fill: #ede9fe; stroke: #8b5cf6; }
+  .store { fill: #fef3c7; stroke: #f59e0b; }
+  .arrow { stroke: #64748b; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+  .dash { stroke-dasharray: 5 4; }
+</style>
+</head>
+<body>
+<svg id="fig" xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Lane 1: ingestion -->
+  <text class="lane" x="20" y="30">1 · INGESTION</text>
+  <text class="s" x="150" y="30">background job, status shown in the Library</text>
+  <rect class="box" rx="10" x="20" y="45" width="150" height="92"/>
+  <text class="t" x="35" y="72">Upload</text>
+  <text class="s" x="35" y="92">Lecture PDFs, Beamer</text>
+  <text class="s" x="35" y="108">slides, scanned notes</text>
+
+  <rect class="box hot" rx="10" x="200" y="45" width="240" height="92"/>
+  <text class="t" x="215" y="72">Layout-aware parsing (Docling)</text>
+  <text class="s" x="215" y="92">layout model · TableFormer · OCR</text>
+  <text class="s" x="215" y="108">formula → LaTeX</text>
+  <text class="s" x="215" y="124">page + bounding box per block</text>
+
+  <rect class="box hot" rx="10" x="470" y="45" width="240" height="92"/>
+  <text class="t" x="485" y="72">Parent–child chunking</text>
+  <text class="s" x="485" y="92">parents ≈ 800–1200 tokens</text>
+  <text class="s" x="485" y="108">children 200–300 tokens</text>
+  <text class="s" x="485" y="124">50-token overlap, atomic formulas</text>
+
+  <rect class="box store" rx="10" x="750" y="40" width="430" height="30"/>
+  <text class="t" x="765" y="60">SQLite · documents, parent chunks, quizzes, mastery</text>
+  <rect class="box store" rx="10" x="750" y="76" width="210" height="30"/>
+  <text class="t" x="765" y="96">Qdrant · BGE-M3 vectors</text>
+  <rect class="box store" rx="10" x="970" y="76" width="210" height="30"/>
+  <text class="t" x="985" y="96">bm25s · math-aware tokens</text>
+
+  <path class="arrow" d="M170,91 L198,91"/>
+  <path class="arrow" d="M440,91 L468,91"/>
+  <path class="arrow" d="M710,80 L748,57"/>
+  <path class="arrow" d="M710,92 L748,91"/>
+
+  <!-- Lane 2: grounded chat -->
+  <text class="lane" x="20" y="192">2 · GROUNDED CHAT</text>
+  <rect class="box" rx="10" x="20" y="210" width="150" height="92"/>
+  <text class="t" x="35" y="237">Question</text>
+  <text class="s" x="35" y="257">+ history → standalone</text>
+  <text class="s" x="35" y="273">optional multi-query</text>
+  <text class="s" x="35" y="289">and HyDE expansion</text>
+
+  <rect class="box hot" rx="10" x="200" y="210" width="210" height="92"/>
+  <text class="t" x="215" y="237">Hybrid retrieval</text>
+  <text class="s" x="215" y="257">dense top-25 + BM25 top-25</text>
+  <text class="s" x="215" y="273">Reciprocal Rank Fusion, k = 60</text>
+  <text class="s" x="215" y="289">top-15 children → parents</text>
+
+  <rect class="box hot" rx="10" x="440" y="210" width="210" height="92"/>
+  <text class="t" x="455" y="237">Cross-encoder rerank</text>
+  <text class="s" x="455" y="257">bge-reranker-v2-m3</text>
+  <text class="s" x="455" y="273">top-5 with score &gt; τ = 0.35</text>
+  <text class="s" x="455" y="289">none left → “Not found”</text>
+
+  <rect class="box llm" rx="10" x="680" y="210" width="200" height="92"/>
+  <text class="t" x="695" y="237">Qwen 2.5 7B (Ollama)</text>
+  <text class="s" x="695" y="257">answers only from context</text>
+  <text class="s" x="695" y="273">cites [Source: file.pdf, p. N]</text>
+  <text class="s" x="695" y="289">streamed over SSE</text>
+
+  <rect class="box hot" rx="10" x="910" y="210" width="270" height="92"/>
+  <text class="t" x="925" y="237">Citation verification</text>
+  <text class="s" x="925" y="257">source in context · claim on cited page</text>
+  <text class="s" x="925" y="273">highlight paragraph · auto-cite supported</text>
+  <text class="s" x="925" y="289">sentences · flag unsupported claims</text>
+
+  <path class="arrow" d="M170,256 L198,256"/>
+  <path class="arrow" d="M410,256 L438,256"/>
+  <path class="arrow" d="M650,256 L678,256"/>
+  <path class="arrow" d="M880,256 L908,256"/>
+  <path class="arrow dash" d="M855,107 C855,160 380,150 380,208"/>
+  <path class="arrow dash" d="M1075,107 C1075,170 395,160 395,208"/>
+
+  <!-- Lane 3: adaptive quiz -->
+  <text class="lane" x="20" y="362">3 · ADAPTIVE QUIZ</text>
+  <rect class="box" rx="10" x="20" y="380" width="190" height="100"/>
+  <text class="t" x="35" y="407">Context selection</text>
+  <text class="s" x="35" y="427">70 % sampled ∝ (1.05 − M)²</text>
+  <text class="s" x="35" y="443">30 % most relevant / random</text>
+  <text class="s" x="35" y="459">Bloom level per slot</text>
+
+  <rect class="box llm" rx="10" x="235" y="380" width="245" height="100"/>
+  <text class="t" x="250" y="407">Qwen 2.5 · JSON-schema output</text>
+  <text class="s" x="250" y="427">notes shown as numbered [S#]</text>
+  <text class="s" x="250" y="443">4 options, trap type per distractor</text>
+  <text class="s" x="250" y="459">evidence_ids instead of a quote</text>
+
+  <rect class="box hot" rx="10" x="505" y="380" width="235" height="100"/>
+  <text class="t" x="520" y="407">Repair + validate (retry ≤ 2)</text>
+  <text class="s" x="520" y="427">exactly one correct · distinct options</text>
+  <text class="s" x="520" y="443">valid LaTeX · ≥ 2 trap types</text>
+  <text class="s" x="520" y="459">evidence supports the answer</text>
+
+  <rect class="box" rx="10" x="765" y="380" width="190" height="100"/>
+  <text class="t" x="780" y="407">Grading</text>
+  <text class="s" x="780" y="427">rationale for every option</text>
+  <text class="s" x="780" y="443">verbatim quote + page link</text>
+  <text class="s" x="780" y="459">only the first try counts</text>
+
+  <rect class="box store" rx="10" x="980" y="380" width="200" height="100"/>
+  <text class="t" x="995" y="407">Mastery update</text>
+  <text class="s" x="995" y="427">M ← clip(M + α(S − M))</text>
+  <text class="s" x="995" y="443">α = 0.25, M₀ = 0.5</text>
+  <text class="s" x="995" y="459">per parent section</text>
+
+  <path class="arrow" d="M210,430 L233,430"/>
+  <path class="arrow" d="M480,430 L503,430"/>
+  <path class="arrow" d="M740,430 L763,430"/>
+  <path class="arrow" d="M955,430 L978,430"/>
+  <path class="arrow dash" d="M1080,482 C1080,530 115,530 115,484"/>
+  <text class="s" x="460" y="540">weak sections are sampled more often in the next quiz</text>
+
+  <!-- UI band -->
+  <rect rx="10" x="20" y="565" width="1160" height="80" style="fill:#0f172a"/>
+  <text x="40" y="592" style="font-size:15px;font-weight:700;fill:#ffffff">React UI (Vite)</text>
+  <text x="40" y="613" style="font-size:12.5px;fill:#cbd5e1">Library: upload, pipeline status, parsed-Markdown preview</text>
+  <text x="40" y="632" style="font-size:12.5px;fill:#cbd5e1">Chat: streamed answer, verified citation chips · Quiz: hints, explanations, mastery panel</text>
+  <text x="760" y="592" style="font-size:15px;font-weight:700;fill:#5eead4">Split-screen PDF viewer (pdf.js)</text>
+  <text x="760" y="613" style="font-size:12.5px;fill:#cbd5e1">opens the cited page and highlights</text>
+  <text x="760" y="632" style="font-size:12.5px;fill:#cbd5e1">the supporting paragraph</text>
+</svg>
+</body>
+</html>

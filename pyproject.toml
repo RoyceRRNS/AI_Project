@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "course-notes-rag"
+version = "0.1.0"
+description = "Course Notes RAG & Adaptive Quiz Engine"
+requires-python = ">=3.11"
+dependencies = [
+    "docling",
+    "pymupdf",
+    "pymupdf4llm",
+    "sentence-transformers",
+    "qdrant-client",
+    "bm25s",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "pydantic>=2.7",
+    "pydantic-settings",
+    "httpx",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "pytest-cov", "pytest-timeout", "matplotlib"]
+
+[tool.setuptools.packages.find]
+include = ["course_notes_rag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: uses the real models (Docling, BGE-M3, bge-reranker-v2-m3) and Ollama qwen2.5:7b",
+    "docling: uses the Docling parser (slow, downloads layout models)",
+]
+addopts = "-m \"not live\" -p no:cacheprovider"
+timeout = 900
+filterwarnings = ["ignore::DeprecationWarning"]
