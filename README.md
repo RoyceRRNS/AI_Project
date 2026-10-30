@@ -18,6 +18,7 @@ quiz     ─► mastery-weighted section sampling ─► Qwen JSON-schema output
 
 | | |
 |---|---|
+| Technical specification (architecture, every pipeline, data model, API, PEAS, syllabus mapping) | [docs/spec/TECHNICAL_SPEC.md](docs/spec/TECHNICAL_SPEC.md) ([PDF](docs/spec/Course_Notes_Studio_Technical_Spec.pdf)) |
 | IEEE-format report | [docs/report/Course_Notes_RAG_IEEE_Report.pdf](docs/report/Course_Notes_RAG_IEEE_Report.pdf) ([.docx](docs/report/Course_Notes_RAG_IEEE_Report.docx)) |
 | Implementation & demo deck (17 slides, incl. syllabus mapping) | [docs/presentation/Course_Notes_RAG_Demo.pptx](docs/presentation/Course_Notes_RAG_Demo.pptx) ([.pdf](docs/presentation/Course_Notes_RAG_Demo.pdf)) |
 | Benchmark results | [benchmarks/results/](benchmarks/results/) |
