@@ -111,7 +111,7 @@ const shot = (slide, file, x, y, w, crop) => {
   text(s, [
     { text: "Royce B Selvaraj (24BCB0078)", options: { breakLine: true } },
     { text: "Srujan Buddharaju (24BDS0347)", options: { breakLine: true } },
-    { text: "Pranali Kamisetty ([Registration Number])" },
+    { text: "Pranali Kamisetty (24BDS0326)" },
   ], { x: 0.6, y: 4.2, w: 5.6, h: 0.8, fontSize: 11, color: C.background1, paraSpaceAfter: 2 });
   card(s, 6.55, 0.95, 2.95, 3.75, { fill: "1E293B", line: "1E293B" });
   text(s, "EVERY ANSWER IS CHECKED", { x: 6.8, y: 1.15, w: 2.5, h: 0.25, fontSize: 9, bold: true, color: C.background2, charSpacing: 2 });
@@ -440,7 +440,7 @@ const shot = (slide, file, x, y, w, crop) => {
   s = pres.addSlide({ masterName: "CLOSING", sectionTitle: "Wrap-up" });
   s.addText("THANK YOU", { placeholder: "kicker" });
   s.addText("Questions and feedback welcome", { placeholder: "title" });
-  text(s, "Royce B Selvaraj (24BCB0078)  ·  Srujan Buddharaju (24BDS0347)  ·  Pranali Kamisetty ([Registration Number])", { x: 0.6, y: 3.0, w: 8.8, h: 0.3, fontSize: 12, color: C.background1 });
+  text(s, "Royce B Selvaraj (24BCB0078)  ·  Srujan Buddharaju (24BDS0347)  ·  Pranali Kamisetty (24BDS0326)", { x: 0.6, y: 3.0, w: 8.8, h: 0.3, fontSize: 12, color: C.background1 });
   text(s, "github.com/RoyceRRNS/AI_Project", { x: 0.6, y: 3.45, w: 8.8, h: 0.3, fontSize: 12, color: C.accent2, bold: true });
   for (const [i, [ic, col]] of [["LuShieldCheck", HEX.accent6], ["LuLink", HEX.accent1], ["LuSearchX", HEX.accent3]].entries()) {
     await iconDot(s, ic, 0.6 + i * 0.75, 4.1, 0.55, col);

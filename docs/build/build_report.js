@@ -137,7 +137,7 @@ const title = [
     children: [new TextRun({ text: "Course Notes RAG and Adaptive Quiz Engine: Grounded Question Answering and Bloom-Calibrated Practice from Lecture PDFs", font: FONT, size: 44 })] }),
 ];
 const authors = [
-  ["Royce B Selvaraj", "24BCB0078"], ["Srujan Buddharaju", "24BDS0347"], ["Pranali Kamisetty", "[Registration Number]"],
+  ["Royce B Selvaraj", "24BCB0078"], ["Srujan Buddharaju", "24BDS0347"], ["Pranali Kamisetty", "24BDS0326"],
 ];
 const authorTable = new Table({
   width: { size: FULL, type: WidthType.DXA }, columnWidths: [FULL / 3, FULL / 3, FULL / 3], layout: TableLayoutType.FIXED,

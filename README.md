@@ -26,7 +26,7 @@ quiz     ─► mastery-weighted section sampling ─► Qwen JSON-schema output
 
 The report and deck are generated from `docs/build/` (`build_report.js`, `build_deck.js`, with measured numbers in `results.json`); screenshots come from `frontend/scripts/capture-screens.mjs` run against the real stack.
 
-**Team** (BCSE306L Artificial Intelligence, VIT Vellore): Royce B Selvaraj (24BCB0078), Srujan Buddharaju (24BDS0347), Pranali Kamisetty.
+**Team** (BCSE306L Artificial Intelligence, VIT Vellore): Royce B Selvaraj (24BCB0078), Srujan Buddharaju (24BDS0347), Pranali Kamisetty (24BDS0326).
 
 ## Run it
 
