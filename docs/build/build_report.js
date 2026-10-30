@@ -281,7 +281,7 @@ const body4 = [
 
 const syllabus = [
   ["1. Introduction, Intelligent Agents", "Learning agent: perceives notes and questions, acts by answering and quizzing, keeps a student model; partially observable, sequential environment.", "Strong"],
-  ["2. Search", "Retrieval as search over passages: HNSW best-first graph search, BM25 ranking, RRF fusion, top-k pruning.", "Strong"],
+  ["2. Search", "Retrieval as search over passages: cosine and BM25 ranking, RRF fusion, best-first top-k pruning.", "Strong"],
   ["3. Local and Adversarial Search", "Generate-and-test quiz drafting with repair and restarts at rising temperature; distractors as the most tempting wrong answers.", "Partial"],
   ["4. Logic and Reasoning", "Rule-based verification of citations and quiz drafts; “exactly one correct option” as a propositional constraint.", "Strong"],
   ["5. Uncertain Knowledge", "Probabilistic relevance (BM25), reranker probability and abstention threshold, mastery as an updated belief.", "Strong"],

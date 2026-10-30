@@ -364,7 +364,7 @@ const shot = (slide, file, x, y, w, crop) => {
   };
   s = syllabusSlide("Modules 1–4: agents, search, local search, logic", [
     ["M1 Introduction & Intelligent Agents", "Agent structure, environments, applications of AI", "The app is a learning agent: it perceives notes (parser, OCR) and questions, acts by answering and quizzing, and keeps a student model. The environment is partially observable (knowledge is hidden) and sequential.", "Strong"],
-    ["M2 Search", "State-space search, best-first, uniform cost, A*", "Retrieval is search over a space of passages: Qdrant's HNSW index runs greedy best-first search on vector distance; BM25 and RRF rank and prune candidates to the top 15 / top 5.", "Strong"],
+    ["M2 Search", "State-space search, best-first, uniform cost, A*", "Retrieval is search over a space of passages: cosine and BM25 scores order the frontier, RRF fuses the rankings, and best-first pruning keeps 25 → 15 → 5 for the costly cross-encoder.", "Strong"],
     ["M3 Local & Adversarial Search", "Hill climbing, simulated annealing, minimax", "Quiz generation is generate-and-test: score a draft against constraints, repair it, or restart with a higher temperature. Distractors are chosen as the most tempting wrong answers.", "Partial"],
     ["M4 Logic & Reasoning", "Propositional and first-order logic, forward chaining", "Citation and quiz validation are rule-based inference: facts (file, page, section range) fire rules that conclude valid / moved / unsupported; “exactly one correct option” is a propositional constraint.", "Strong"],
   ]);
@@ -382,7 +382,7 @@ const shot = (slide, file, x, y, w, crop) => {
     ["CO1", "Evaluate AI methods and their foundations", "10-question retrieval benchmark (Hit@k, MRR); offline stand-ins vs. real models; before/after ablations of each fix."],
     ["CO2", "Apply AI to inference, perception, representation and learning", "Perception (layout, OCR), knowledge representation (parent/child chunks, vectors), inference (verification rules), learning (mastery model)."],
     ["CO3", "Reason with uncertainty and knowledge representation", "Probabilistic ranking, a relevance threshold that answers “Not found” instead of guessing, mastery as an updated belief."],
-    ["CO4", "Show how search drives problem solving", "Best-first vector search, BM25 ranking, rank fusion and top-k pruning decide what the model is allowed to say."],
+    ["CO4", "Show how search drives problem solving", "Ranked vector and BM25 search, rank fusion and top-k pruning decide what the model is allowed to say."],
   ];
   for (const [i, [co, head, body]] of cos.entries()) {
     const col = i % 2, row = Math.floor(i / 2);
