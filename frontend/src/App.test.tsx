@@ -68,6 +68,34 @@ describe("App", () => {
     expect(await screen.findByText(/qwen2.5:7b unavailable/)).toBeInTheDocument();
   });
 
+  it("re-checks quickly while the model is down and recovers without a reload", async () => {
+    const down = { ...health, llm: { ...health.llm, ok: false, detail: "Ollama not reachable" } };
+    const mocks = mockBackend({ health: vi.fn().mockResolvedValueOnce(down).mockResolvedValueOnce(down).mockResolvedValue(health) });
+    renderWithStore(<App />, { toasts: false, healthRetryMs: 50 });
+    expect(await screen.findByText(/qwen2.5:7b unavailable/)).toBeInTheDocument();
+    expect(await screen.findByText(/qwen2.5:7b ready/)).toBeInTheDocument();
+    expect(mocks.health).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not re-check quickly while the model is ready", async () => {
+    const mocks = mockBackend();
+    renderWithStore(<App />, { toasts: false, healthRetryMs: 20 });
+    expect(await screen.findByText(/qwen2.5:7b ready/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(mocks.health).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps re-checking while the backend is unreachable and loads the courses once it is back", async () => {
+    mockBackend({
+      health: vi.fn().mockRejectedValueOnce(new Error("Failed to fetch")).mockResolvedValue(health),
+      listCourses: vi.fn().mockRejectedValueOnce(new Error("Failed to fetch")).mockResolvedValue([course]),
+    });
+    renderWithStore(<App />, { toasts: false, healthRetryMs: 50 });
+    expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument();
+    expect(await screen.findByText(/qwen2.5:7b ready/)).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /Library/ })).toBeInTheDocument();
+  });
+
   it("reports an unreachable backend", async () => {
     mockBackend({ listCourses: vi.fn().mockRejectedValue(new Error("Failed to fetch")), health: vi.fn().mockRejectedValue(new Error("x")) });
     renderWithStore(<App />, { toasts: false });

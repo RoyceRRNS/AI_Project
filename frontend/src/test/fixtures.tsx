@@ -71,9 +71,12 @@ export function streamOf(events: SSEEvent[], error?: Error) {
 }
 
 /** Renders inside the store; adds the toast list unless the UI (e.g. <App/>) has its own. */
-export function renderWithStore(ui: ReactNode, { toasts = true }: { toasts?: boolean } = {}) {
+export function renderWithStore(
+  ui: ReactNode,
+  { toasts = true, ...store }: { toasts?: boolean; healthMs?: number; healthRetryMs?: number } = {},
+) {
   return render(
-    <StoreProvider pollMs={20}>
+    <StoreProvider pollMs={20} {...store}>
       {ui}
       {toasts && <Toasts />}
     </StoreProvider>,

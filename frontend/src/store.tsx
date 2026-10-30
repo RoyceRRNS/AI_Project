@@ -57,7 +57,17 @@ export const storage = {
 
 const PROCESSING = new Set(["queued", "parsing", "chunking", "indexing"]);
 
-export function StoreProvider({ children, pollMs = 1200 }: { children: ReactNode; pollMs?: number }) {
+interface StoreProviderProps {
+  children: ReactNode;
+  /** Document-status polling while files are processing. */
+  pollMs?: number;
+  /** Health re-check interval while the model is ready. */
+  healthMs?: number;
+  /** Faster re-check while the model or the API is down, so the badge recovers without a reload. */
+  healthRetryMs?: number;
+}
+
+export function StoreProvider({ children, pollMs = 1200, healthMs = 30000, healthRetryMs = 3000 }: StoreProviderProps) {
   const [health, setHealth] = useState<Health | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState<string | null>(() => storage.get("cnr.course"));
@@ -83,16 +93,47 @@ export function StoreProvider({ children, pollMs = 1200 }: { children: ReactNode
     return list;
   }, []);
 
-  useEffect(() => {
-    api.health().then(setHealth).catch(() => setHealth(null));
-    const timer = window.setInterval(() => api.health().then(setHealth).catch(() => setHealth(null)), 30000);
-    refreshCourses()
-      .then((list) => {
+  const loadCourses = useCallback(
+    () =>
+      refreshCourses().then((list) => {
         setCourseId((current) => (current && list.some((c) => c.id === current) ? current : list[0]?.id ?? null));
-      })
-      .catch((e) => notify(`Could not reach the server: ${e.message}`, "error"));
-    return () => window.clearInterval(timer);
-  }, [refreshCourses, notify]);
+      }),
+    [refreshCourses],
+  );
+
+  useEffect(() => {
+    loadCourses().catch((e) => notify(`Could not reach the server: ${e.message}`, "error"));
+  }, [loadCourses, notify]);
+
+  // Self-scheduling so a slow check never overlaps the next one.
+  useEffect(() => {
+    let live = true;
+    let timer: number | undefined;
+    let unreachable = false;
+    const check = () =>
+      api
+        .health()
+        .then((h) => {
+          if (!live) return false;
+          setHealth(h);
+          if (unreachable) loadCourses().catch(() => undefined);
+          unreachable = false;
+          return h.llm.ok;
+        })
+        .catch(() => {
+          if (live) setHealth(null);
+          unreachable = true;
+          return false;
+        })
+        .then((ok) => {
+          if (live) timer = window.setTimeout(check, ok ? healthMs : healthRetryMs);
+        });
+    void check();
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [loadCourses, healthMs, healthRetryMs]);
 
   const selectCourse = useCallback((id: string | null) => {
     setCourseId(id);
