@@ -1,12 +1,15 @@
 /* Palette: blush #F3B3A6, mauve #B98B82, rose #E4959E, slate #37515F, aubergine #1F0812.
    Light mode leads with slate on blush-white; dark mode with peach on aubergine. */
 :root {
-  --bg: #fbf5f3;
+  --bg: #f4e3de;
+  /* Soft peach and rose light behind the page; white cards sit on top of it. */
+  --page-glow: radial-gradient(1100px 560px at 0% 0%, rgba(243, 179, 166, 0.3), transparent 70%),
+    radial-gradient(900px 520px at 100% 100%, rgba(228, 149, 158, 0.18), transparent 70%);
   --surface: #ffffff;
   --surface-2: #f7edea;
   --border: #ecddd9;
   --text: #1f0812;
-  --muted: #765a57;
+  --muted: #6e524f;
   --accent: #37515f;
   --accent-2: #2a404c;
   --accent-soft: #f9e7e3;
@@ -39,6 +42,7 @@
 /* Set on <html> by index.html and useTheme(): the saved choice, or the system setting. */
 :root[data-theme="dark"] {
   --bg: #1f0812;
+  --page-glow: none;
   --surface: #2a111c;
   --surface-2: #341a26;
   --border: #4a2c38;
@@ -71,7 +75,8 @@
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--page-glow);
   color: var(--text);
   font: 14.5px/1.55 var(--font);
   -webkit-font-smoothing: antialiased;
@@ -373,7 +378,7 @@ input[type="range"] { accent-color: var(--accent); }
 .relevance { height: 3px; background: var(--border); border-radius: 999px; margin: 6px 0; overflow: hidden; }
 .relevance > div { height: 100%; background: var(--accent); }
 .excerpt { margin: 0; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.composer { border-top: 1px solid var(--border); padding-top: 0.75rem; background: var(--bg); }
+.composer { border-top: 1px solid var(--border); padding-top: 0.75rem; }
 .composer-tools { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem; }
 .scope { position: relative; }
 .scope .menu { top: auto; bottom: calc(100% + 6px); }
