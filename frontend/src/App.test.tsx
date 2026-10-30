@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { mockBackend } from "./test/backend";
@@ -101,6 +101,51 @@ describe("App", () => {
     renderWithStore(<App />, { toasts: false });
     expect(await screen.findByText(/Could not reach the server/)).toBeInTheDocument();
     expect(screen.getByText("Offline")).toBeInTheDocument();
+  });
+
+  it("switches between system, light and dark themes and remembers the choice", async () => {
+    mockBackend();
+    renderWithStore(<App />, { toasts: false });
+    const root = document.documentElement;
+    const toggle = await screen.findByRole("button", { name: /Theme: System\. Switch to Light/ });
+    expect(root.dataset.theme).toBe("light"); // jsdom has no dark system setting
+    fireEvent.click(toggle);
+    expect(root.dataset.theme).toBe("light");
+    expect(localStorage.getItem("cnr.theme")).toBe("light");
+    fireEvent.click(screen.getByRole("button", { name: /Theme: Light\. Switch to Dark/ }));
+    expect(root.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("cnr.theme")).toBe("dark");
+    fireEvent.click(screen.getByRole("button", { name: /Theme: Dark\. Switch to System/ }));
+    expect(root.dataset.theme).toBe("light");
+    expect(localStorage.getItem("cnr.theme")).toBeNull();
+  });
+
+  it("restores a saved theme and follows the system while on System", async () => {
+    let dark = true;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal("matchMedia", () => ({
+      get matches() { return dark; },
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    }));
+    try {
+      localStorage.setItem("cnr.theme", "light");
+      mockBackend();
+      const view = renderWithStore(<App />, { toasts: false });
+      await screen.findByRole("button", { name: /Theme: Light/ });
+      expect(document.documentElement.dataset.theme).toBe("light"); // saved choice beats the dark system
+      view.unmount();
+
+      localStorage.removeItem("cnr.theme");
+      renderWithStore(<App />, { toasts: false });
+      await screen.findByRole("button", { name: /Theme: System/ });
+      expect(document.documentElement.dataset.theme).toBe("dark");
+      dark = false;
+      act(() => listeners.forEach((fn) => fn()));
+      expect(document.documentElement.dataset.theme).toBe("light");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("switches and deletes courses", async () => {

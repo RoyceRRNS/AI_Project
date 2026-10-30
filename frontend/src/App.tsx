@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import {
-  BookOpen, Brain, ChevronDown, Library as LibraryIcon, Loader2, MessagesSquare, Plus, Sparkles, Trash2,
+  BookOpen, Brain, ChevronDown, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon, Plus, Sparkles,
+  Sun, Trash2,
 } from "lucide-react";
 import { api } from "./api";
 import { Chat } from "./components/Chat";
@@ -8,6 +9,7 @@ import { EmptyCourses, Library } from "./components/Library";
 import { Quiz } from "./components/Quiz";
 import { Toasts } from "./components/Toasts";
 import { storage, useStore } from "./store";
+import { nextTheme, useTheme, type ThemeChoice } from "./theme";
 
 // pdf.js is large; load the viewer only when a document is first opened.
 const PdfViewer = lazy(() => import("./components/PdfViewer").then((m) => ({ default: m.PdfViewer })));
@@ -43,6 +45,7 @@ export default function App() {
         </div>
         {courses.length > 0 && <CourseSwitcher onCreate={() => setCreating(true)} />}
         <HealthPill />
+        <ThemeToggle />
       </header>
 
       {!course ? (
@@ -214,6 +217,21 @@ function CreateCourseDialog({ onClose, onCreated }: { onClose: () => void; onCre
         </div>
       </form>
     </div>
+  );
+}
+
+const THEME_NAME: Record<ThemeChoice, string> = { system: "System", light: "Light", dark: "Dark" };
+const THEME_ICON: Record<ThemeChoice, typeof Sun> = { system: Monitor, light: Sun, dark: Moon };
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme();
+  const next = nextTheme(theme);
+  const Icon = THEME_ICON[theme];
+  const label = `Theme: ${THEME_NAME[theme]}. Switch to ${THEME_NAME[next]}`;
+  return (
+    <button type="button" className="icon-btn theme-toggle" onClick={() => setTheme(next)} aria-label={label} title={label}>
+      <Icon size={16} />
+    </button>
   );
 }
 
