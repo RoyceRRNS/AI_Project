@@ -16,6 +16,7 @@ _PART = re.compile(
     re.IGNORECASE,
 )
 _MIN_CLAIM_WORDS = 6
+_DISPLAY_MATH = re.compile(r"\$\$.*?\$\$", re.S)
 
 
 @dataclass
@@ -153,7 +154,10 @@ def verify_citations(
     passages: a sentence whose terms are mostly found in one passage gets an *inferred*
     citation (inserted into ``annotated_answer``); the rest are reported as unsupported.
     """
-    report = _verify(answer, chunks)
+    moved = _move_citations_out_of_math(answer)
+    report = _verify(moved, chunks)
+    if moved != answer:
+        report.annotated_answer = answer = moved
     if not complete or not report.uncited_sentences:
         return report
     insertions: list[tuple[int, str]] = []
@@ -179,6 +183,20 @@ def verify_citations(
         cit.inferred = cit.start in starts
     final.annotated_answer = annotated
     return final
+
+
+def _move_citations_out_of_math(answer: str) -> str:
+    """A citation inside ``$$...$$`` breaks KaTeX; move it to the line right after the block."""
+
+    def relocate(match: re.Match[str]) -> str:
+        block = match.group(0)
+        found = [m.group(0) for m in _BRACKET.finditer(block)]
+        if not found:
+            return block
+        cleaned = re.sub(r"[ \t]+(?=\n|\$\$\Z)", "", _BRACKET.sub("", block))
+        return f"{cleaned}\n{' '.join(found)}"
+
+    return _DISPLAY_MATH.sub(relocate, answer)
 
 
 def _best_support(sentence: str, chunks: list[RetrievedChunk]) -> tuple[RetrievedChunk, int] | None:
@@ -280,7 +298,9 @@ def _uncited_claims(answer: str) -> tuple[list[str], int]:
     """Prose sentences of 6+ words that carry no citation of their own."""
     uncited: list[str] = []
     claims = 0
-    for paragraph in re.split(r"\n\s*\n", answer):
+    # Equations are not claims: an inferred citation inside $$...$$ would break the math.
+    prose_only = _DISPLAY_MATH.sub("\n\n", answer)
+    for paragraph in re.split(r"\n\s*\n", prose_only):
         para = paragraph.strip()
         if not para or para.startswith(("#", "$$", "```", "|")):
             continue

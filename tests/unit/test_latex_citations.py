@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from course_notes_rag.generation.citations import format_citation, parse_citations, verify_citations
@@ -164,6 +166,54 @@ def test_citation_to_the_wrong_page_is_flagged_with_the_right_page():
     right = verify_citations("Exploding gradients are handled with gradient clipping [Source: R.pdf, p. 1].", [chunk])
     assert right.citations[0].page_supported and right.citations[0].suggested_page is None
     assert right.to_dict()["page_mismatch_count"] == 0
+
+
+def _display_blocks(text):
+    return re.findall(r"\$\$.*?\$\$", text, re.S)
+
+
+def test_completion_never_cites_inside_display_math():
+    # Docling writes formulas with spaced tokens, so an equation line matches its own block well.
+    formula = "\\alpha _ { i } { ^ { * } } \\, g _ { i } ( w { ^ { * } } ) \\, = \\, 0 , \\, i = 1 , \\, \\dots , \\, k"
+    blocks = [
+        Block("text", "Complementary slackness requires the product of multiplier and constraint to vanish.", 2,
+              BBox(2, 10, 60, 500, 90)),
+        Block("formula", formula, 2, BBox(2, 10, 100, 500, 130)),
+    ]
+    chunk = RetrievedChunk("p", "d", "c", "L.pdf", "L", "KKT", blocks, 2, 3)
+    answer = (
+        "Complementary slackness requires that the product of each multiplier and its constraint is zero:\n"
+        f"$$\n{formula}\n$$\n"
+        "This implies that $\\alpha_i^* > 0$ only when the constraint is active [Source: L.pdf, p. 2]."
+    )
+    report = verify_citations(answer, [chunk])
+    text = report.annotated_answer or answer
+    assert _display_blocks(text) == [f"$$\n{formula}\n$$"]
+    assert report.uncited_sentences == [] and report.claim_count == 1
+    assert [c.inferred for c in report.citations] == [False]
+
+
+def test_citation_written_inside_display_math_is_moved_after_it():
+    answer = (
+        "The dual objective is a concave function of the multipliers:\n"
+        "$$\nW(\\alpha) = \\sum_i \\alpha_i [Source: Lecture_04_SVMs.pdf, p. 2]\n$$\n"
+        "It is maximized subject to the box constraints [Source: Lecture_04_SVMs.pdf, p. 3]."
+    )
+    report = verify_citations(answer, [_chunk()])
+    assert report.annotated_answer == (
+        "The dual objective is a concave function of the multipliers:\n"
+        "$$\nW(\\alpha) = \\sum_i \\alpha_i\n$$\n[Source: Lecture_04_SVMs.pdf, p. 2]\n"
+        "It is maximized subject to the box constraints [Source: Lecture_04_SVMs.pdf, p. 3]."
+    )
+    assert [c.valid for c in report.citations] == [True, True]
+    one_line = verify_citations("We get $$a = b [Source: Lecture_04_SVMs.pdf, p. 2]$$", [_chunk()], complete=False)
+    assert one_line.annotated_answer == "We get $$a = b$$\n[Source: Lecture_04_SVMs.pdf, p. 2]"
+
+
+def test_display_math_without_citations_is_left_alone():
+    answer = "The margin is defined below [Source: Lecture_04_SVMs.pdf, p. 2].\n$$\n\\gamma = 1 / \\Vert w \\Vert\n$$"
+    report = verify_citations(answer, [_chunk()])
+    assert report.annotated_answer is None and report.citations[0].valid
 
 
 def test_no_citations_is_not_grounded():
