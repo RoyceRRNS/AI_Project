@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import mimetypes
 from collections.abc import Iterable, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -28,6 +29,11 @@ from course_notes_rag.services import Services, build_services
 from course_notes_rag.storage.db import NotFoundError
 
 log = logging.getLogger(__name__)
+
+# The Windows registry often maps .mjs to text/plain, and browsers refuse to run a module script
+# served that way (the pdf.js worker). Register the types the built UI needs explicitly.
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("application/wasm", ".wasm")
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
 

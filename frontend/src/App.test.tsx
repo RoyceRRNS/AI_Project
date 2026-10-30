@@ -4,11 +4,14 @@ import App from "./App";
 import { mockBackend } from "./test/backend";
 import { course, health, renderWithStore } from "./test/fixtures";
 
+const pdf = vi.hoisted(() => ({ crash: false }));
+
 vi.mock("react-pdf", async () => {
   const { useEffect } = await import("react");
   return {
     pdfjs: { GlobalWorkerOptions: {} },
     Document: ({ children, onLoadSuccess }: { children: React.ReactNode; onLoadSuccess?: (d: { numPages: number }) => void }) => {
+      if (pdf.crash) throw new Error('Setting up fake worker failed: "Failed to fetch dynamically imported module"');
       useEffect(() => onLoadSuccess?.({ numPages: 3 }), [onLoadSuccess]);
       return <div data-testid="pdf-document">{children}</div>;
     },
@@ -60,6 +63,29 @@ describe("App", () => {
     expect(within(viewer).getByTestId("pdf-page")).toHaveTextContent("page 2");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("complementary", { name: "PDF viewer" })).toBeNull();
+  });
+
+  it("keeps the app running when the PDF viewer crashes, and recovers on the next open", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    pdf.crash = true;
+    try {
+      mockBackend();
+      renderWithStore(<App />, { toasts: false });
+      fireEvent.click(await screen.findByRole("button", { name: "Open Lecture_04_SVMs.pdf" }));
+      const viewer = await screen.findByRole("complementary", { name: "PDF viewer" });
+      expect(await within(viewer).findByRole("alert")).toHaveTextContent("Setting up fake worker failed");
+      expect(screen.getByRole("tab", { name: /Library/ })).toBeInTheDocument();
+      fireEvent.click(within(viewer).getByRole("button", { name: "Close viewer" }));
+      expect(screen.queryByRole("complementary", { name: "PDF viewer" })).toBeNull();
+
+      pdf.crash = false;
+      fireEvent.click(screen.getByRole("button", { name: "Open Lecture_04_SVMs.pdf" }));
+      const again = await screen.findByRole("complementary", { name: "PDF viewer" });
+      expect(await within(again).findByTestId("pdf-page")).toHaveTextContent("page 1");
+    } finally {
+      pdf.crash = false;
+      quiet.mockRestore();
+    }
   });
 
   it("shows model health", async () => {

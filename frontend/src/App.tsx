@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   BookOpen, Brain, ChevronDown, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon, Plus, Sparkles,
   Sun, Trash2,
@@ -14,6 +14,31 @@ import { nextTheme, useTheme, type ThemeChoice } from "./theme";
 // pdf.js is large; load the viewer only when a document is first opened.
 const PdfViewer = lazy(() => import("./components/PdfViewer").then((m) => ({ default: m.PdfViewer })));
 
+/** A failure inside pdf.js (e.g. its worker cannot load) stays in the viewer pane instead of blanking the app. */
+class ViewerBoundary extends Component<{ onClose: () => void; children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("PDF viewer failed", error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <aside className="viewer" aria-label="PDF viewer">
+        <div className="viewer-error" role="alert">
+          <p>The PDF viewer stopped working: {this.state.error.message}</p>
+          <button className="btn sm" onClick={this.props.onClose}>Close viewer</button>
+        </div>
+      </aside>
+    );
+  }
+}
+
 export type Tab = "library" | "chat" | "quiz";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
@@ -23,7 +48,7 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
 ];
 
 export default function App() {
-  const { course, courses, viewer, readyDocs } = useStore();
+  const { course, courses, viewer, readyDocs, closeViewer } = useStore();
   const [tab, setTab] = useState<Tab>(() => (storage.get("cnr.tab") as Tab) || "library");
   const [creating, setCreating] = useState(false);
 
@@ -85,9 +110,11 @@ export default function App() {
             </div>
           </section>
           {viewer && (
-            <Suspense fallback={<aside className="viewer"><div className="viewer-loading">Loading viewer…</div></aside>}>
-              <PdfViewer />
-            </Suspense>
+            <ViewerBoundary key={viewer.nonce} onClose={closeViewer}>
+              <Suspense fallback={<aside className="viewer"><div className="viewer-loading">Loading viewer…</div></aside>}>
+                <PdfViewer />
+              </Suspense>
+            </ViewerBoundary>
           )}
         </main>
       )}

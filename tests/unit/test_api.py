@@ -214,3 +214,20 @@ def test_spa_is_served_when_built(services, tmp_path):
         assert c.get("/library/anything").text == "<html>app</html>"
         assert c.get("/assets/app.js").text == "console.log(1)"
         assert c.get("/api/unknown").status_code == 404
+
+
+def test_spa_serves_module_and_wasm_files_with_types_browsers_accept(services, tmp_path):
+    # Windows' registry often maps .mjs to text/plain; browsers then refuse the pdf.js worker module.
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "pdfjs" / "wasm").mkdir(parents=True)
+    (dist / "index.html").write_text("<html>app</html>", encoding="utf-8")
+    (dist / "assets" / "pdf.worker.min-abc.mjs").write_text("export {}", encoding="utf-8")
+    (dist / "pdfjs" / "wasm" / "openjpeg.wasm").write_bytes(b"\0asm\1\0\0\0")
+    services.settings.frontend_dist = dist
+    with TestClient(create_app(services)) as c:
+        worker = c.get("/assets/pdf.worker.min-abc.mjs")
+        assert worker.status_code == 200 and worker.headers["content-type"].startswith("text/javascript")
+        wasm = c.get("/pdfjs/wasm/openjpeg.wasm")
+        assert wasm.status_code == 200 and wasm.headers["content-type"] == "application/wasm"
+        assert c.get("/assets/missing.mjs").status_code == 404

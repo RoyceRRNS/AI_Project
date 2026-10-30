@@ -8,6 +8,12 @@
       "port": 8000
     },
     {
+      "name": "built-ui-check",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["scripts/serve.py", "--profile", "test", "--storage-dir", "storage-built-check", "--fresh", "--port", "8766"],
+      "port": 8766
+    },
+    {
       "name": "api",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["scripts/serve.py", "--port", "8000"],
