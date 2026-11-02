@@ -6,10 +6,12 @@ import {
 import { api } from "./api";
 import { Chat } from "./components/Chat";
 import { EmptyCourses, Library } from "./components/Library";
+import { Papers } from "./components/Papers";
 import { Quiz } from "./components/Quiz";
 import { Toasts } from "./components/Toasts";
 import { storage, useStore } from "./store";
 import { nextTheme, useTheme, type ThemeChoice } from "./theme";
+import { FileStack } from "lucide-react";
 
 // pdf.js is large; load the viewer only when a document is first opened.
 const PdfViewer = lazy(() => import("./components/PdfViewer").then((m) => ({ default: m.PdfViewer })));
@@ -39,12 +41,13 @@ class ViewerBoundary extends Component<{ onClose: () => void; children: ReactNod
   }
 }
 
-export type Tab = "library" | "chat" | "quiz";
+export type Tab = "library" | "chat" | "quiz" | "papers";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "library", label: "Library", icon: LibraryIcon },
   { id: "chat", label: "Chat", icon: MessagesSquare },
   { id: "quiz", label: "Quiz", icon: Brain },
+  { id: "papers", label: "Papers", icon: FileStack },
 ];
 
 export default function App() {
@@ -107,6 +110,7 @@ export default function App() {
               {tab === "library" && <Library />}
               {tab === "chat" && <Chat key={course.id} />}
               {tab === "quiz" && <Quiz key={course.id} />}
+              {tab === "papers" && <Papers key={course.id} />}
             </div>
           </section>
           {viewer && (

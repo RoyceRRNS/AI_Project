@@ -29,7 +29,9 @@ class ParseError(RuntimeError):
 class DocumentParser(Protocol):
     name: str
 
-    def parse(self, path: Path, *, pdf_name: str | None = None) -> ParsedDocument: ...
+    def parse(
+        self, path: Path, *, pdf_name: str | None = None, keep_markers: bool = False
+    ) -> ParsedDocument: ...
 
 
 # --- Shared helpers ------------------------------------------------------------------
@@ -156,14 +158,17 @@ class PyMuPDFParser:
         self._ocr_engine = None
         self._lock = threading.Lock()
 
-    def parse(self, path: Path, *, pdf_name: str | None = None) -> ParsedDocument:
+    def parse(
+        self, path: Path, *, pdf_name: str | None = None, keep_markers: bool = False
+    ) -> ParsedDocument:
+        """``keep_markers`` keeps list markers and line breaks: "1." and "(a)" are data in an exam."""
         doc = _open_pdf(Path(path))
         try:
-            return self._parse(doc, pdf_name or Path(path).name)
+            return self._parse(doc, pdf_name or Path(path).name, keep_markers)
         finally:
             doc.close()
 
-    def _parse(self, doc, pdf_name: str) -> ParsedDocument:
+    def _parse(self, doc, pdf_name: str, keep_markers: bool = False) -> ParsedDocument:
         page_sizes = [(float(p.rect.width), float(p.rect.height)) for p in doc]
         raw: list[tuple[int, dict, list[dict], str]] = []
         tables: dict[int, list[tuple[BBox, str]]] = {}
@@ -182,12 +187,14 @@ class PyMuPDFParser:
                 text_blocks.append((block, spans))
             if not text_blocks:
                 if self.ocr and page.get_images():
-                    ocr_blocks.extend(self._ocr_page(page, pno))
+                    ocr_blocks.extend(self._ocr_page(page, pno, keep_markers))
                 continue
             for block, spans in text_blocks:
                 text = _block_text(block)
                 fonts = {sp.get("font", "") for sp in spans}
-                kind = "formula" if looks_like_formula(text, fonts) else "prose"
+                # An exam line such as "Compute P(A) = 0.3" is a question, not a display equation.
+                is_formula = not keep_markers and looks_like_formula(text, fonts)
+                kind = "formula" if is_formula else "prose"
                 if kind == "prose":
                     for sp in spans:
                         sizes[round(sp["size"], 1)] += len(sp["text"].strip())
@@ -211,7 +218,7 @@ class PyMuPDFParser:
                     latex = unicode_math_to_latex(_block_text(block))
                     blocks.append(Block("formula", latex, pno, bbox))
                 else:
-                    blocks.extend(self._text_blocks(pno, block, spans, heading_sizes))
+                    blocks.extend(self._text_blocks(pno, block, spans, heading_sizes, keep_markers))
         # Tables with no overlapping text block (rare) still get emitted.
         for pno, page_tables in tables.items():
             for t_idx, (tb, md) in enumerate(page_tables):
@@ -247,7 +254,8 @@ class PyMuPDFParser:
         return found
 
     def _text_blocks(
-        self, pno: int, block: dict, spans: list[dict], heading_sizes: list[float]
+        self, pno: int, block: dict, spans: list[dict], heading_sizes: list[float],
+        keep_markers: bool = False,
     ) -> list[Block]:
         x0, y0, x1, y1 = block["bbox"]
         bbox = BBox(pno, x0, y0, x1, y1)
@@ -261,6 +269,8 @@ class PyMuPDFParser:
         if bold and len(text) <= 90 and len(lines) == 1 and not text.endswith((".", ":")):
             level = infer_heading_level(text, len(heading_sizes) + 1)
             return [Block("heading", text, pno, bbox, level)]
+        if keep_markers:
+            return [Block("text", "\n".join(lines), pno, bbox)]
         if len(lines) > 1 and all(_BULLET.match(ln) for ln in lines):
             return [Block("list_item", _BULLET.sub("", ln), pno, bbox) for ln in lines]
         if _BULLET.match(text):
@@ -277,7 +287,7 @@ class PyMuPDFParser:
                 self._ocr_engine = RapidOCR()
             return self._ocr_engine
 
-    def _ocr_page(self, page, pno: int) -> list[Block]:
+    def _ocr_page(self, page, pno: int, keep_lines: bool = False) -> list[Block]:
         try:
             import numpy as np
 
@@ -298,7 +308,7 @@ class PyMuPDFParser:
             xs = [float(pt[0]) * scale for pt in box]
             ys = [float(pt[1]) * scale for pt in box]
             lines.append((BBox(pno, min(xs), min(ys), max(xs), max(ys)), text.strip()))
-        return group_ocr_lines(lines, pno)
+        return group_ocr_lines(lines, pno, keep_lines=keep_lines)
 
 
 def _block_lines(block: dict) -> list[str]:
@@ -313,7 +323,9 @@ def _block_text(block: dict) -> str:
     return " ".join(_block_lines(block))
 
 
-def group_ocr_lines(lines: list[tuple[BBox, str]], pno: int) -> list[Block]:
+def group_ocr_lines(
+    lines: list[tuple[BBox, str]], pno: int, *, keep_lines: bool = False
+) -> list[Block]:
     """Join OCR lines into paragraphs; a markedly taller first line becomes the heading."""
     if not lines:
         return []
@@ -332,7 +344,8 @@ def group_ocr_lines(lines: list[tuple[BBox, str]], pno: int) -> list[Block]:
         if para:
             box = BBox(pno, min(b.x0 for b, _ in para), min(b.y0 for b, _ in para),
                        max(b.x1 for b, _ in para), max(b.y1 for b, _ in para))
-            blocks.append(Block("text", " ".join(t for _, t in para), pno, box))
+            joiner = "\n" if keep_lines else " "
+            blocks.append(Block("text", joiner.join(t for _, t in para), pno, box))
             para.clear()
 
     for box, text in lines[start:]:
@@ -370,7 +383,9 @@ class DoclingParser:
                 )
             return self._converter
 
-    def parse(self, path: Path, *, pdf_name: str | None = None) -> ParsedDocument:
+    def parse(
+        self, path: Path, *, pdf_name: str | None = None, keep_markers: bool = False
+    ) -> ParsedDocument:
         path = Path(path)
         pdf = _open_pdf(path)  # fail fast with a clear message on broken files
         meta_title = ((pdf.metadata or {}).get("title") or "").strip()
@@ -380,7 +395,9 @@ class DoclingParser:
             result = converter.convert(path, raises_on_error=True)
         except Exception as exc:  # noqa: BLE001
             raise ParseError(f"Docling could not convert {path.name}: {exc}") from exc
-        parsed = docling_to_parsed(result.document, pdf_name or path.name, engine=self.name)
+        parsed = docling_to_parsed(
+            result.document, pdf_name or path.name, engine=self.name, keep_markers=keep_markers
+        )
         if not parsed.title and meta_title and meta_title.lower() != "untitled":
             parsed.title = meta_title
         return parsed
@@ -407,7 +424,17 @@ def _build_docling_converter(*, formula_enrichment: bool, ocr: bool, device: str
     )
 
 
-def docling_to_parsed(ddoc, pdf_name: str, *, engine: str = "docling") -> ParsedDocument:
+def _with_marker(item, text: str) -> str:
+    """A list item's text with its enumeration marker ("1.", "(a)") put back; bullets stay out."""
+    marker = str(getattr(item, "marker", "") or "").strip()
+    if not any(ch.isalnum() for ch in marker) or text.startswith(marker):
+        return text
+    return f"{marker} {text}"
+
+
+def docling_to_parsed(
+    ddoc, pdf_name: str, *, engine: str = "docling", keep_markers: bool = False
+) -> ParsedDocument:
     from docling_core.types.doc import DocItemLabel, SectionHeaderItem, TableItem, TextItem
 
     page_sizes: list[tuple[float, float]] = []
@@ -453,7 +480,8 @@ def docling_to_parsed(ddoc, pdf_name: str, *, engine: str = "docling") -> Parsed
             base = int(getattr(item, "level", 1) or 1) + (1 if has_title else 0)
             blocks.append(Block("heading", text, pno, bbox, infer_heading_level(text, base)))
         elif label == DocItemLabel.LIST_ITEM:
-            blocks.append(Block("list_item", _BULLET.sub("", text), pno, bbox))
+            kept = _with_marker(item, text) if keep_markers else _BULLET.sub("", text)
+            blocks.append(Block("list_item", kept, pno, bbox))
         elif label == DocItemLabel.CODE:
             blocks.append(Block("code", text, pno, bbox))
         elif label == DocItemLabel.CAPTION:
@@ -482,16 +510,19 @@ class AutoParser:
         self.fallback = fallback
         self.name = f"{primary.name}+{fallback.name}"
 
-    def parse(self, path: Path, *, pdf_name: str | None = None) -> ParsedDocument:
+    def parse(
+        self, path: Path, *, pdf_name: str | None = None, keep_markers: bool = False
+    ) -> ParsedDocument:
+        options = {"keep_markers": True} if keep_markers else {}
         try:
-            return self.primary.parse(path, pdf_name=pdf_name)
+            return self.primary.parse(path, pdf_name=pdf_name, **options)
         except ImportError:
             log.warning("Docling not installed; using PyMuPDF")
         except ParseError as exc:
             if "not a readable PDF" in str(exc) or "not a PDF" in str(exc) or "password" in str(exc):
                 raise
             log.warning("primary parser failed (%s); using PyMuPDF", exc)
-        doc = self.fallback.parse(path, pdf_name=pdf_name)
+        doc = self.fallback.parse(path, pdf_name=pdf_name, **options)
         doc.engine = f"{self.fallback.name} (fallback)"
         return doc
 

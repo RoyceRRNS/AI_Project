@@ -16,6 +16,7 @@ from typing import Any
 
 from course_notes_rag.generation.evidence import parse_numbered_notes
 from course_notes_rag.generation.prompts import NOT_FOUND_MESSAGE
+from course_notes_rag.papers.offline import offline_paper_reply
 from course_notes_rag.retrieval.lexical import tokenize
 from course_notes_rag.text_utils import split_sentences
 
@@ -73,6 +74,9 @@ class ExtractiveLLM:
     def chat(self, messages, *, temperature=None, json_schema: dict[str, Any] | None = None) -> str:
         system = messages[0]["content"] if messages else ""
         user = messages[-1]["content"] if messages else ""
+        paper_reply = offline_paper_reply(messages)
+        if paper_reply is not None:
+            return paper_reply
         if json_schema is not None:
             return self._quiz(messages, json_schema)
         if system.startswith("Rewrite the student's latest message"):

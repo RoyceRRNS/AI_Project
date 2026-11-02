@@ -55,12 +55,13 @@ class CachingParser:
         self.cache: dict[str, object] = {}
         self.lock = threading.Lock()
 
-    def parse(self, path, *, pdf_name=None):
-        key = hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).exists() else str(path)
+    def parse(self, path, *, pdf_name=None, keep_markers=False):
+        digest = hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).exists() else str(path)
+        key = f"{digest}:{keep_markers}"
         with self.lock:
             if key not in self.cache:
                 try:
-                    self.cache[key] = self.inner.parse(path)
+                    self.cache[key] = self.inner.parse(path, keep_markers=keep_markers)
                 except Exception as exc:  # noqa: BLE001 - cache failures too
                     self.cache[key] = exc
             result = self.cache[key]

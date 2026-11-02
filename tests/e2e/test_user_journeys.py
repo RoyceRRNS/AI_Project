@@ -264,3 +264,126 @@ def test_uc12_sample_course_onboarding(client):
     assert all(d["status"] == "ready" for d in docs)
     _, by_name, _ = chat(client, body["course"]["id"], "What is the kernel trick?")
     assert by_name["sources"][0]["sources"][0]["pdf_name"] == SVM
+
+
+# --- UC: past question papers -----------------------------------------------------------
+
+
+def wait_for_papers(client, course_id, expected, timeout=120):
+    deadline = time.time() + timeout
+    papers = []
+    while time.time() < deadline:
+        papers = client.get(f"/api/courses/{course_id}/papers").json()
+        if len(papers) == expected and all(p["status"] in ("ready", "failed") for p in papers):
+            return papers
+        time.sleep(0.1)
+    raise TimeoutError(papers)
+
+
+def test_uc_past_papers_blueprint_plan_and_mock_paper(client, library):
+    course_id = library["course"]["id"]
+
+    # An empty course explains itself rather than failing.
+    empty = client.get(f"/api/courses/{course_id}/papers/blueprint").json()
+    assert empty["summary"]["papers"] == 0 and empty["typical"] is None
+    refused = client.post("/api/papers/mock", json={"course_id": course_id})
+    assert refused.status_code == 400 and "past paper" in refused.json()["detail"]
+
+    # Upload every layout: numbered text, a question table and a scan.
+    assert client.post(f"/api/courses/{course_id}/papers/sample").status_code == 202
+    papers = wait_for_papers(client, course_id, 4)
+    assert all(p["status"] == "ready" for p in papers), papers
+    by_name = {p["pdf_name"]: p for p in papers}
+    assert [p["year"] for p in papers] == [2022, 2023, 2024, 2025], "oldest paper first"
+    assert by_name["End_Semester_2024.pdf"]["exam_type"] == "End-Semester"
+    assert by_name["End_Semester_2024.pdf"]["max_marks"] == 40
+    assert by_name["CAT1_Fall_2025.pdf"]["exam_type"] == "CAT-1"
+
+    detail = client.get(f"/api/papers/{by_name['End_Semester_2024.pdf']['id']}").json()
+    labels = [q["label"] for q in detail["questions"]]
+    assert labels[:6] == ["1", "2", "3", "4", "5", "6(a)"] and "8(b)" in labels
+    bayes = next(q for q in detail["questions"] if q["label"] == "7(a)")
+    assert bayes["question_type"] == "numerical" and bayes["bloom_level"] == "Apply"
+    assert bayes["marks"] == 10 and bayes["part"] == "B" and bayes["choice_group"] == "7"
+    assert "Lecture_02" in bayes["notes_pdf"], "a Bayes question must map to the probability notes"
+
+    table = client.get(f"/api/papers/{by_name['CAT1_Fall_2025.pdf']['id']}").json()["questions"]
+    assert [q["label"] for q in table] == ["1(a)", "1(b)", "2", "3"]
+    assert [q["marks"] for q in table] == [4, 6, 10, 10]
+    assert table[0]["bloom_level"] == "Remember" and table[0]["bloom_source"] == "paper"
+    scan = client.get(f"/api/papers/{by_name['End_Semester_May_2022_Scan.pdf']['id']}").json()
+    assert [q["marks"] for q in scan["questions"]] == [5, 5, 10]
+
+    # The blueprint: weightage, type mix, structure, recurring questions, phrasings.
+    blue = client.get(f"/api/courses/{course_id}/papers/blueprint").json()
+    assert blue["summary"]["papers"] == 4 and blue["summary"]["questions"] == 29
+    assert blue["summary"]["coverage"] > 0.7
+    assert blue["modules"][0]["marks"] > 0 and blue["sections"][0]["papers"] >= 1
+    assert sum(t["share"] for t in blue["types"]) == pytest.approx(1.0, abs=0.01)
+    assert {t["key"] for t in blue["types"] if t["count"]} >= {
+        "definition", "explain_compare", "derivation", "numerical", "algorithm", "diagram",
+    }
+    typical = blue["typical"]
+    assert typical["paper_count"] == 2 and typical["total_marks"] == 40
+    assert [p["pattern"] for p in typical["parts"]] == ["5 × 2", "3 × 10"]
+    assert typical["parts"][1]["either_or"] is True
+    recurring = blue["recurring"]
+    assert any("Bayes" in c["text"] and c["papers"] >= 2 for c in recurring), recurring
+    assert any("kernel trick" in c["text"] for c in recurring), recurring
+    phrasings = {p["phrasing"]: p for p in blue["phrasings"]}
+    assert phrasings["Define …"]["count"] >= 4
+    assert phrasings["Define …"]["examples"][0]["text"].startswith("Define")
+
+    # The plan: priorities, what to practise, mastery from quizzes feeds into it.
+    plan = client.get(f"/api/courses/{course_id}/papers/plan", params={"days": 5}).json()
+    assert plan["items"][0]["rank"] == 1 and plan["items"][0]["priority"] == 100
+    assert plan["items"][0]["tier"] == "must"
+    assert {i["focus"] for i in plan["items"]} & {"numericals", "derivations", "algorithm_tracing"}
+    assert all(i["examples"] for i in plan["items"])
+    assert plan["schedule"][-1]["title"] == "Timed mock paper"
+
+    # A mock paper in the same pattern, with worked solutions citing the notes.
+    resp = client.post("/api/papers/mock", json={"course_id": course_id, "kind": "paper", "seed": 3})
+    assert resp.status_code == 200, resp.text
+    events = parse_sse(resp.text)
+    assert events[0][0] == "mock" and events[-1][0] == "done"
+    assert not [e for e in events if e[0] == "error"], events
+    questions = [d["question"] for n, d in events if n == "question"]
+    assert events[-1][1]["generated"] == len(questions) >= 10
+    assert events[0][1]["spec"]["max_marks"] == 40, "one side of each OR, as in the template"
+    assert [q["label"] for q in questions[:6]] == ["1", "2", "3", "4", "5", "6(a)"]
+    assert {q["marks"] for q in questions} == {2, 10}
+    kinds = {q["question_type"] for q in questions}
+    assert {"numerical", "algorithm"} <= kinds
+    pdfs = {d["pdf_name"] for d in library["docs"].values()}
+    for q in questions:
+        cites = q["report"]["citations"]
+        assert cites and all(c["valid"] and c["pdf_name"] in pdfs for c in cites), q
+        assert f"[Source: {cites[0]['pdf_name']}, p. {cites[0]['page']}]" in q["solution"]
+    worked = next(q for q in questions if q["question_type"] == "numerical")
+    assert worked["answer_check"]["value"] is not None
+
+    saved = client.get(f"/api/courses/{course_id}/mocks").json()
+    assert saved[0]["question_count"] == len(questions) and saved[0]["kind"] == "paper"
+    assert len(client.get(f"/api/mocks/{saved[0]['id']}").json()["questions"]) == len(questions)
+
+    # A focused practice set on one question type.
+    resp = client.post("/api/papers/mock", json={
+        "course_id": course_id, "kind": "practice", "num_questions": 2,
+        "question_types": ["numerical"], "topic": "Bayes theorem", "seed": 1,
+    })
+    practice = [d["question"] for n, d in parse_sse(resp.text) if n == "question"]
+    assert [q["question_type"] for q in practice] == ["numerical", "numerical"]
+
+    # Notes change: mappings to the deleted lecture go stale, and re-mapping clears them.
+    client.delete(f"/api/documents/{library['docs'][SVM]['id']}")
+    blue = client.get(f"/api/courses/{course_id}/papers/blueprint").json()
+    assert blue["stale_questions"] > 0
+    assert client.post(f"/api/courses/{course_id}/papers/remap").json()["queued"] == 4
+    wait_for_papers(client, course_id, 4)
+    blue = client.get(f"/api/courses/{course_id}/papers/blueprint").json()
+    assert blue["stale_questions"] == 0 and blue["gaps"], "SVM questions are now gaps in the notes"
+
+    # Deleting the course removes its papers and their files.
+    client.delete(f"/api/courses/{course_id}")
+    assert client.get(f"/api/papers/{by_name['CAT1_Fall_2025.pdf']['id']}").status_code == 404

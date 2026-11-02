@@ -167,14 +167,14 @@ export interface ChatTurn { role: "user" | "assistant"; content: string }
 
 const BASE = "/api";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) throw await errorFromResponse(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
-const json = (body: unknown): RequestInit => ({
+export const json = (body: unknown): RequestInit => ({
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
