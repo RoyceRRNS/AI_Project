@@ -23,7 +23,7 @@ from course_notes_rag.papers.extract import read_paper
 from course_notes_rag.papers.mock import MockGenerator, MockRequest
 from course_notes_rag.papers.plan import build_plan
 from course_notes_rag.papers.samples import build_sample_papers
-from course_notes_rag.retrieval.encoders import Embedder
+from course_notes_rag.retrieval.encoders import Embedder, Reranker
 from course_notes_rag.storage.db import Database, NotFoundError
 from course_notes_rag.storage.papers import PaperStore
 
@@ -40,14 +40,15 @@ class PaperService:
     def __init__(
         self, db: Database, llm: LLMClient, parser: DocumentParser, retriever: Any,
         embedder: Embedder, ingestion: IngestionService, papers_dir: Path, *,
-        mastery_initial: float = 0.5, max_upload_mb: int = 100, max_retries: int = 2,
-        temperature: float = 0.4,
+        reranker: Reranker | None = None, mastery_initial: float = 0.5, max_upload_mb: int = 100,
+        max_retries: int = 2, temperature: float = 0.4,
     ) -> None:
         self.db = db
         self.store = PaperStore(db)
         self.llm = llm
         self.parser = parser
         self.embedder = embedder
+        self.reranker = reranker
         self.ingestion = ingestion
         self.papers_dir = Path(papers_dir)
         self.mastery_initial = mastery_initial
@@ -245,7 +246,7 @@ class PaperService:
             cached = self._blueprints.get(course_id)
         if cached and cached[0] == key:
             return cached[1]
-        blueprint = build_blueprint(papers, questions, self.embedder)
+        blueprint = build_blueprint(papers, questions, self.embedder, self.reranker)
         with self._lock:
             self._blueprints[course_id] = (key, blueprint)
         return blueprint

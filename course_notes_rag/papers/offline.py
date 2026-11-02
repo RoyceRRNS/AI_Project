@@ -99,8 +99,8 @@ def _mock(user: str, turn: int) -> str:
         body = {
             "question": (f"Apply the method from {section} to a small example of your own and "
                          f"trace it step by step, given that {claim}."),
-            "steps": [cite, {"text": "Apply this to the first input and record the state.", "evidence_ids": []},
-                      {"text": "Repeat for the next input and compare the states.", "evidence_ids": []}],
+            "steps": [cite, {"text": f"Apply this to the first input: state = {a}.", "evidence_ids": []},
+                      {"text": f"Repeat for the next input: state = {b}.", "evidence_ids": []}],
             "final_answer": "The trace ends once every input has been processed.",
         }
     elif kind == "derivation":

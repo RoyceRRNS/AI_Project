@@ -16,6 +16,7 @@ from typing import Any
 from course_notes_rag.generation.llm import LLMClient, LLMError
 from course_notes_rag.papers import prompts
 from course_notes_rag.papers.taxonomy import BLOOM_LEVELS, QUESTION_TYPES
+from course_notes_rag.text_utils import split_sentences
 
 log = logging.getLogger(__name__)
 
@@ -87,8 +88,12 @@ _BLOOM_VERBS: list[tuple[str, re.Pattern[str]]] = [
     ("Understand", re.compile(r"\b(?:explain|describe|discuss|summari[sz]e|interpret|classify|illustrate|why|how)\b")),
     ("Remember", re.compile(r"\b(?:define|list|state|name|what|recall|identify|mention|write|expand|label|enumerate|outline)\b")),
 ]
+_ASSIGNMENT = re.compile(r"[A-Za-z_][\w^]*(?:\([^()=]*\))?\s*=\s*-?\d[\d.]*%?")
+_VALUE = re.compile(r"(?<![\w.^])-?\d+(?:\.\d+)?%?(?!\w)")
+_STRAY_PUNCTUATION = re.compile(r"(?:^|(?<=\s))[,;:]+(?=\s|$)")
 _BOILERPLATE = re.compile(
-    r"\b(?:define|state|list|explain|describe|discuss|compare|contrast|differentiate|distinguish|"
+    r"\b(?:differentiate between|distinguish between|define|state|list|explain|describe|discuss|"
+    r"compare|contrast|differentiate|distinguish|"
     r"derive|prove|show that|show|compute|calculate|evaluate|determine|find|draw|sketch|trace|"
     r"apply|illustrate|write short notes? on|what is meant by|what is|what are|with a neat diagram|"
     r"with neat diagram|with a suitable example|with an example|briefly|in detail|neat|"
@@ -143,6 +148,25 @@ def topic_query(text: str, context: str = "") -> str:
     return (cleaned if len(cleaned.split()) >= 2 else full)[:TOPIC_QUERY_CHARS]
 
 
+def strip_values(text: str) -> str:
+    """The question without its data: "P(T | D) = 0.95" and "0.25" tell a search nothing."""
+    cleaned = _STRAY_PUNCTUATION.sub(" ", _VALUE.sub(" ", _ASSIGNMENT.sub(" ", text)))
+    return " ".join(cleaned.split()).strip(" .,;:")
+
+
+def topic_queries(text: str, context: str = "") -> list[str]:
+    """What to search for, in order.
+
+    The reranker scores a problem statement far below its subject: the variance of a Bernoulli
+    variable scored 0.06 with its numbers and 0.80 without. So a question with data is also tried
+    without it, and by its last sentence, which is where the actual ask is.
+    """
+    full = topic_query(text, context)
+    sentences = split_sentences(text)
+    ask = topic_query(sentences[-1]) if len(sentences) > 1 else full
+    return [q for q in dict.fromkeys((full, strip_values(full), strip_values(ask))) if q]
+
+
 class QuestionClassifier:
     def __init__(self, llm: LLMClient, retriever: Any, *, topic_threshold: float = TOPIC_THRESHOLD) -> None:
         self.llm = llm
@@ -195,17 +219,16 @@ class QuestionClassifier:
     ) -> dict[str, dict[str, Any] | None]:
         topics: dict[str, dict[str, Any] | None] = {}
         for q in questions:
-            query = topic_query(q["text"], q.get("context") or "")
-            if not query:
+            chunk = None
+            for query in topic_queries(q["text"], q.get("context") or ""):
+                result = self.retriever.retrieve(
+                    query, course_id, top_n=1, threshold=self.topic_threshold, expansion="none"
+                )
+                if result.chunks and (chunk is None or result.chunks[0].rerank_score > chunk.rerank_score):
+                    chunk = result.chunks[0]
+            if chunk is None:
                 topics[q["id"]] = None
                 continue
-            result = self.retriever.retrieve(
-                query, course_id, top_n=1, threshold=self.topic_threshold, expansion="none"
-            )
-            if result.not_found or not result.chunks:
-                topics[q["id"]] = None
-                continue
-            chunk = result.chunks[0]
             topics[q["id"]] = {
                 "parent_id": chunk.parent_id, "section_title": chunk.section_title,
                 "lecture_title": chunk.lecture_title, "notes_pdf": chunk.pdf_name,
@@ -217,5 +240,5 @@ class QuestionClassifier:
 
 __all__ = [
     "QUESTION_TYPES", "QuestionClassifier", "TOPIC_THRESHOLD", "classify_bloom", "classify_type",
-    "numbers_in", "topic_query",
+    "numbers_in", "strip_values", "topic_queries", "topic_query",
 ]

@@ -17,7 +17,7 @@ from course_notes_rag.papers.classify import numbers_in
 from course_notes_rag.papers.taxonomy import (
     BLOOM_LEVELS, PRACTICE_LABELS, PRACTICE_MODES, QUESTION_TYPES, TYPE_LABELS, UNMAPPED_MODULE,
 )
-from course_notes_rag.retrieval.encoders import Embedder
+from course_notes_rag.retrieval.encoders import Embedder, Reranker
 from course_notes_rag.retrieval.lexical import tokenize
 
 # Older papers count for less: 0.8 per year behind the newest paper.
@@ -34,6 +34,12 @@ SAME_DICE = 0.7
 SAME_COSINE = 0.92
 SAME_SECTION_DICE = 0.55
 SAME_SECTION_COSINE = 0.8
+# With the real models the cross-encoder decides. Embeddings cannot: "Define the geometric margin"
+# and "Define the functional margin" score cosine 0.91, above a true rephrasing at 0.83. Read as a
+# pair in both directions, repeats scored at least 0.73 and different questions at most 0.69.
+SAME_CONFIRMED = 0.7
+SHORTLIST_DICE = 0.5
+SHORTLIST_COSINE = 0.75
 
 _COMMAND_TERMS = frozenset(
     """define state list explain describe discuss compare contrast differentiate distinguish derive
@@ -174,7 +180,8 @@ def _typical(structures: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def find_recurring(
-    questions: list[dict[str, Any]], embedder: Embedder | None, papers: dict[str, dict[str, Any]]
+    questions: list[dict[str, Any]], embedder: Embedder | None, papers: dict[str, dict[str, Any]],
+    reranker: Reranker | None = None,
 ) -> list[dict[str, Any]]:
     """Clusters of the same question asked in different papers, biggest first.
 
@@ -198,6 +205,11 @@ def find_recurring(
         overlap = dice(terms[i], terms[j])
         sim = float(cosine[i, j]) if cosine is not None else 0.0
         a, b = ordered[i], ordered[j]
+        if reranker is not None:
+            if overlap < SHORTLIST_DICE and sim < SHORTLIST_COSINE:
+                return 0.0
+            agreed = min(reranker.score(texts[i], [texts[j]])[0], reranker.score(texts[j], [texts[i]])[0])
+            return agreed if agreed >= SAME_CONFIRMED else 0.0
         same_topic = bool(a.get("parent_id")) and a.get("parent_id") == b.get("parent_id")
         same_kind = a.get("question_type") == b.get("question_type")
         if overlap >= SAME_WORDS or sim >= SAME_COSINE:
@@ -357,7 +369,8 @@ def _topic_rows(
 
 
 def build_blueprint(
-    papers: list[dict[str, Any]], questions: list[dict[str, Any]], embedder: Embedder | None = None
+    papers: list[dict[str, Any]], questions: list[dict[str, Any]], embedder: Embedder | None = None,
+    reranker: Reranker | None = None,
 ) -> dict[str, Any]:
     by_id = {p["id"]: p for p in papers}
     questions = [q for q in questions if q["paper_id"] in by_id]
@@ -409,7 +422,7 @@ def build_blueprint(
         "marks_distribution": [{"marks": m, "count": n} for m, n in sorted(marks_counts.items())],
         "structures": structures,
         "typical": _typical(structures),
-        "recurring": find_recurring(questions, embedder, by_id),
+        "recurring": find_recurring(questions, embedder, by_id, reranker),
         "phrasings": find_phrasings(questions, by_id),
         "practice_mix": [
             {"mode": mode, "label": PRACTICE_LABELS[mode], "marks": round(marks, 2),

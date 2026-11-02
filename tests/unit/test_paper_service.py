@@ -205,6 +205,10 @@ def test_blueprint_is_reused_until_something_changes(services, course, sample_pa
     assert second is not first and second["structures"][0]["title"] == "Renamed"
 
 
+def test_the_offline_profile_does_not_judge_repeats_with_its_word_counter(services):
+    assert services.papers.reranker is None
+
+
 def test_plan_with_bad_days_is_a_request_error(services, course):
     with pytest.raises(PaperRequestError, match="days"):
         services.papers.plan(course["id"], 0)

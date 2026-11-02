@@ -69,6 +69,14 @@ def test_questions_map_to_the_right_notes(live):
     assert "Lecture_02" in (questions["7(a)"]["notes_pdf"] or ""), "Bayes belongs to the probability slides"
     assert "Lecture_04" in (questions["6(a)"]["notes_pdf"] or ""), "the SVM dual belongs to the SVM lecture"
     assert "Lecture_07" in (questions["7(b)"]["notes_pdf"] or ""), "the LSTM belongs to the RNN lecture"
+    scan = by_label(live["papers"]["End_Semester_May_2022_Scan.pdf"])
+    assert "Lecture_02" in (scan["3"]["notes_pdf"] or ""), "numbers must not hide a Bernoulli question"
+
+
+def test_a_question_outside_the_notes_is_a_gap_not_a_guess(live):
+    classifier = live["services"].papers.classifier
+    question = {"id": "x", "text": "Explain how chloroplasts carry out photosynthesis."}
+    assert classifier.map_topics([question], live["course_id"]) == {"x": None}
 
 
 def test_blueprint_finds_the_exam_pattern(live):
@@ -81,10 +89,16 @@ def test_blueprint_finds_the_exam_pattern(live):
     ))
     assert blueprint["summary"]["coverage"] >= 0.7
     assert blueprint["typical"]["paper_count"] == 2 and blueprint["typical"]["total_marks"] == 40
-    assert any("Bayes" in r["text"] for r in blueprint["recurring"])
-    for cluster in blueprint["recurring"]:
-        kinds = {i["text"].split()[0] for i in cluster["instances"]}
-        assert len(cluster["instances"]) <= 4 and kinds
+    assert blueprint["gaps"] == []
+    clusters = [[i["text"] for i in r["instances"]] for r in blueprint["recurring"]]
+    def together(*words):
+        return any(all(any(w in text for text in c) for w in words) for c in clusters)
+
+    assert together("A disease affects", "Given P(D)"), "two wordings of one Bayes problem"
+    assert together("structure of an LSTM cell", "block diagram of an LSTM cell")
+    assert together("geometric margin of a training example", "geometric margin of a training set")
+    assert not together("functional margin", "geometric margin"), "different terms, different questions"
+    assert not together("stochastic gradient descent", "learning rate")
 
 
 def test_plan_is_built_from_the_papers(live):
@@ -100,13 +114,15 @@ def test_qwen_writes_a_grounded_practice_set(live):
     events = list(services.papers.generate_mock(req))
     questions = [e.data["question"] for e in events if e.type == "question"]
     warnings = [e.data["message"] for e in events if e.type in ("warning", "error")]
+    fields = ("question_type", "marks", "section_title", "question", "solution", "final_answer",
+              "answer_check", "marking", "repairs")
+    summary = {"model": services.llm.model, "warnings": warnings,
+               "questions": [{k: q[k] for k in fields} for q in questions]}
     REPORT.mkdir(parents=True, exist_ok=True)
     (REPORT / "papers_live_practice.json").write_text(
-        json.dumps({"questions": questions, "warnings": warnings}, indent=1, ensure_ascii=False), encoding="utf-8",
+        json.dumps(summary, indent=1, ensure_ascii=False), encoding="utf-8",
     )
-    print(json.dumps([{k: q[k] for k in ("question_type", "marks", "question", "solution", "final_answer", "answer_check", "repairs")}
-                      for q in questions], indent=1, ensure_ascii=False))
-    print("warnings", warnings)
+    print(json.dumps(summary, indent=1))  # ASCII: a Windows console cannot print every symbol
     assert len(questions) >= 2, warnings
     for q in questions:
         cites = q["report"]["citations"]

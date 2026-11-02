@@ -49,7 +49,10 @@ class Services:
     def __post_init__(self) -> None:
         self.papers = PaperService(
             self.db, self.llm, self.parser, self.retriever, self.embedder, self.ingestion,
-            self.settings.storage_dir / "papers", mastery_initial=self.settings.mastery_initial,
+            self.settings.storage_dir / "papers",
+            # The offline stand-in counts shared words, which cannot judge "same question".
+            reranker=None if self.settings.profile == "test" else self.reranker,
+            mastery_initial=self.settings.mastery_initial,
             max_upload_mb=self.settings.max_upload_mb, max_retries=self.settings.quiz_max_retries,
             temperature=self.settings.quiz_temperature,
         )

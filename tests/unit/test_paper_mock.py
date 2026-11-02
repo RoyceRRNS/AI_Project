@@ -12,7 +12,8 @@ from course_notes_rag.models import BBox, Block, ParentChunk
 from course_notes_rag.papers import prompts
 from course_notes_rag.papers.blueprint import build_blueprint
 from course_notes_rag.papers.mock import (
-    MockDraft, MockGenerator, MockRequest, MockRequestError, Slot, answers_agree, assign_sections,
+    MockDraft, MockGenerator, MockRequest, MockRequestError, Slot, answers_agree, arithmetic_slips,
+    assign_sections,
     check_mock_draft, draft_schema, ensure_applied, finalize, practice_slots, repair_mock_draft,
     safe_eval, stated_number, suits, template_slots,
 )
@@ -90,6 +91,29 @@ def test_stated_number(text, value):
 @pytest.mark.parametrize("text", ["", "no numbers here", "1/0"])
 def test_stated_number_without_a_value(text):
     assert stated_number(text) is None
+
+
+@pytest.mark.parametrize("text", [
+    "So $6 / 3 = 2$.", "$16 \\times (0.5)^{12} = 16 \\times 0.000244140625 = 0.00390625$",
+    "$\\frac{6}{3} = 2$", "$0.75 \\cdot 1 + 0.25 \\cdot 2 = 1.25$", "$t - k = 16 - 4 = 12$",
+    "$\\theta = 4$", "$2^{3} = 8$", "no mathematics at all", "6 / 3 = 2 in plain text",
+    "$x = y$", "$f(x) = \\sqrt{4}$",
+])
+def test_true_steps_have_no_slips(text):
+    assert arithmetic_slips(text) == []
+
+
+@pytest.mark.parametrize("text, wrong", [
+    ("So $4 - 0.1 \\cdot 2 = 3.2$.", "3.2"), ("$\\frac{6}{3} = 3$", "3"), ("$2^{3} = 9$", "9"),
+    ("$t - k = 16 - 4 = 11$", "11"),
+])
+def test_wrong_steps_are_caught(text, wrong):
+    slips = arithmetic_slips(text)
+    assert len(slips) == 1 and slips[0].endswith(wrong)
+
+
+def test_words_beside_numbers_are_not_read_as_arithmetic():
+    assert arithmetic_slips("6 / 3 = 3 in plain text") == []
 
 
 def test_answers_agree_allows_rounding_and_percentages():
@@ -172,6 +196,105 @@ def test_derivation_must_show_mathematics():
     assert any("mathematics" in p for p in problems_of(bad, slot("derivation")))
 
 
+def test_instructions_are_not_a_worked_solution():
+    """Qwen did this for an SMO question: steps saying what to do, then an unsupported answer."""
+    bad = draft(question_type="algorithm", steps=[
+        {"text": "Write the Lagrangian for the geometric margin.", "evidence_ids": [1]},
+        {"text": "Identify the constraints from the Lagrangian.", "evidence_ids": []},
+        {"text": "Set up the KKT conditions for the problem.", "evidence_ids": []},
+        {"text": "Update $\\alpha_1$ and $\\alpha_2$ with the rule.", "evidence_ids": []},
+    ])
+    assert any("actual working" in p for p in problems_of(bad, slot("algorithm")))
+
+
+def test_showing_values_is_a_worked_solution():
+    good = draft(question_type="algorithm", steps=[
+        {"text": "The geometric margin is the functional margin over the norm.", "evidence_ids": [1]},
+        {"text": "Dividing gives margin = 2.", "evidence_ids": []},
+        {"text": "After the update, margin = 3.", "evidence_ids": []},
+    ], final_answer="The margin ends at 3.")
+    assert not any("actual working" in p for p in problems_of(good, slot("algorithm")))
+
+
+def test_theory_does_not_need_numbers():
+    d = draft(question_type="explain_compare", answer_expression="", steps=[
+        {"text": "The geometric margin is the functional margin over the norm.", "evidence_ids": [1]},
+        {"text": "So it does not change when the weights are rescaled.", "evidence_ids": []},
+    ])
+    assert not any("actual working" in p for p in problems_of(d, slot("explain_compare")))
+
+
+TRACE_QUESTION = (
+    "Apply two steps of gradient descent to $J(\\theta) = (\\theta - 3)^2$ from $\\theta = 4$ "
+    "with a learning rate of $0.1$ for the geometric margin."
+)
+
+
+def test_repeating_the_question_is_not_working():
+    """Qwen did this: each step named a calculation, then the answer said about 3.2 (it is 3.64)."""
+    bad = draft(question=TRACE_QUESTION, question_type="algorithm", steps=[
+        {"text": "The geometric margin needs the gradient of $J(\\theta) = (\\theta - 3)^2$ at $\\theta = 4$.", "evidence_ids": [1]},
+        {"text": "Next take a step from $\\theta = 4$ with $0.1$.", "evidence_ids": []},
+        {"text": "Then take the gradient of $J(\\theta) = (\\theta - 3)^2$ again.", "evidence_ids": []},
+    ], final_answer="After two steps theta is about 3.2.")
+    problems = problems_of(bad, slot("algorithm"))
+    assert any("actual working" in p for p in problems)
+    assert any("no solution step reaches" in p for p in problems)
+
+
+def test_a_real_trace_passes():
+    good = draft(question=TRACE_QUESTION, question_type="algorithm", steps=[
+        {"text": "The geometric margin rule gives the gradient $2(\\theta - 3)$, which is 2 at the start.", "evidence_ids": [1]},
+        {"text": "First update: $4 - 0.1 \\cdot 2 = 3.8$.", "evidence_ids": []},
+        {"text": "Second update: $3.8 - 0.1 \\cdot 1.6 = 3.64$.", "evidence_ids": []},
+    ], final_answer="After two steps theta is 3.64.")
+    problems = problems_of(good, slot("algorithm"))
+    assert not any("actual working" in p or "recompute" in p or "reaches" in p for p in problems)
+
+
+def test_a_wrong_step_is_sent_back():
+    bad = draft(question=TRACE_QUESTION, question_type="algorithm", steps=[
+        {"text": "The geometric margin rule gives the gradient, which is 2 at the start.", "evidence_ids": [1]},
+        {"text": "First update: $4 - 0.1 \\cdot 2 = 3.2$.", "evidence_ids": []},
+    ], final_answer="After one step theta is 3.2.")
+    assert any("recompute this step" in p and "3.8" in p for p in problems_of(bad, slot("algorithm")))
+
+
+def test_an_answer_with_no_number_is_not_checked_against_the_steps():
+    good = draft(question=TRACE_QUESTION, question_type="algorithm", steps=[
+        {"text": "The geometric margin rule gives the gradient, which is 2 at the start.", "evidence_ids": [1]},
+        {"text": "First update: $4 - 0.1 \\cdot 2 = 3.8$.", "evidence_ids": []},
+    ], final_answer="The trace stops once the update settles.")
+    assert not any("reaches" in p for p in problems_of(good, slot("algorithm")))
+
+
+def test_an_outline_is_not_an_answer():
+    """Qwen did this for a comparison: instructions to the student instead of the answer."""
+    bad = draft(question_type="explain_compare", answer_expression="", steps=[
+        {"text": "Define the geometric margin and explain its role.", "evidence_ids": [1]},
+        {"text": "Explain the issue with the functional margin alone.", "evidence_ids": []},
+        {"text": "Compare the two margins.", "evidence_ids": []},
+    ])
+    assert any("write the answer itself" in p for p in problems_of(bad, slot("explain_compare")))
+
+
+def test_a_step_can_start_with_a_verb_and_still_do_the_work():
+    good = draft(question_type="algorithm", steps=[
+        {"text": "The geometric margin is the functional margin over the norm.", "evidence_ids": [1]},
+        {"text": "Compute the margin: $6 / 3 = 2$.", "evidence_ids": []},
+        {"text": "Apply the update: margin = 2 + 1 = 3.", "evidence_ids": []},
+    ])
+    assert not any("write the answer itself" in p for p in problems_of(good, slot("algorithm")))
+
+
+def test_an_answer_written_out_is_not_an_outline():
+    good = draft(question_type="explain_compare", answer_expression="", steps=[
+        {"text": "The geometric margin is the functional margin divided by the norm.", "evidence_ids": [1]},
+        {"text": "It does not change when the weights are rescaled.", "evidence_ids": []},
+    ])
+    assert not any("write the answer itself" in p for p in problems_of(good, slot("explain_compare")))
+
+
 def test_diagram_question_must_ask_for_a_diagram():
     bad = draft(question_type="diagram", question="Explain the geometric margin and the norm in detail.")
     assert any("draw or label" in p for p in problems_of(bad, slot("diagram")))
@@ -231,6 +354,41 @@ def test_repair_removes_unknown_evidence():
     assert fixed.steps[0].evidence_ids == [1] and "unknown evidence removed" in repairs
 
 
+def test_repair_turns_inline_markers_into_citations():
+    """Qwen wrote "[S23]" into its solution text, where a student would see it."""
+    broken = draft(steps=[
+        {"text": "The geometric margin divides by the norm [S1].", "evidence_ids": []},
+        {"text": "So the margin is $6 / 3 = 2$.", "evidence_ids": []},
+    ], final_answer="The geometric margin is 2. [S1]")
+    fixed, repairs = repair_mock_draft(broken, slot(), parent())
+    assert fixed.steps[0].text == "The geometric margin divides by the norm."
+    assert fixed.steps[0].evidence_ids == [1]
+    assert fixed.final_answer == "The geometric margin is 2."
+    assert "inline evidence moved" in repairs
+    assert "[S1]" not in finalize(fixed, slot(), parent(), repairs)["solution"]
+
+
+def test_repair_reads_lists_of_inline_markers():
+    broken = draft(
+        steps=[{"text": "The geometric margin divides by the norm [S1, S2].", "evidence_ids": []},
+               {"text": "So the margin is $6 / 3 = 2$.", "evidence_ids": []}],
+        marking=[{"point": "Formula [S1, S3, S4].", "marks": 5}, {"point": "Result", "marks": 5}],
+    )
+    fixed, _repairs = repair_mock_draft(broken, slot(), parent())
+    assert fixed.marking[0].point == "Formula."
+    assert fixed.steps[0].evidence_ids[0] == 1 and "[S" not in fixed.steps[0].text
+
+
+def test_repairs_are_listed_once():
+    broken = draft(steps=[
+        {"text": "The margin [S99] one.", "evidence_ids": []},
+        {"text": "The margin [S98] two.", "evidence_ids": []},
+        {"text": "The geometric margin is the functional margin over the norm.", "evidence_ids": [1]},
+    ])
+    _fixed, repairs = repair_mock_draft(broken, slot(), parent())
+    assert len(repairs) == len(set(repairs))
+
+
 def test_repair_removes_evidence_unrelated_to_its_step():
     broken = draft(steps=[{"text": "Photosynthesis needs chlorophyll and sunlight everywhere.", "evidence_ids": [1]},
                           {"text": "The geometric margin divides by the norm of the weight vector.", "evidence_ids": []}])
@@ -282,6 +440,12 @@ def test_citations_come_from_the_evidence_ids():
     citation = result["report"]["citations"][0]
     assert citation["valid"] is True and citation["document_id"] == "d1" and citation["page"] == 2
     assert result["report"]["invalid_count"] == 0
+
+
+def test_a_citation_highlights_exactly_the_sentence_it_cites():
+    citation = finalize(draft(), slot(), parent(), [])["report"]["citations"][0]
+    assert citation["bboxes"] == [{"page": 2, "x0": 50, "y0": 70, "x1": 500, "y1": 100}]
+    assert citation["page_supported"] is True and citation["suggested_page"] is None
 
 
 def test_steps_are_numbered_and_only_cited_steps_carry_a_citation():

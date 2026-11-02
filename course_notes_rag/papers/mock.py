@@ -25,13 +25,13 @@ from pydantic import BaseModel, Field, ValidationError
 
 from course_notes_rag.generation.citations import format_citation, verify_citations
 from course_notes_rag.generation.evidence import EvidenceUnit, evidence_units, resolve_evidence
-from course_notes_rag.generation.latex import validate_latex
+from course_notes_rag.generation.latex import math_segments, validate_latex
 from course_notes_rag.generation.llm import LLMClient, LLMError, LLMUnavailableError
 from course_notes_rag.generation.prompts import quiz_feedback_message
 from course_notes_rag.generation.quiz_engine import (
     MIN_QUOTE_WORDS, QuizEvent, _strip_fences, restore_latex_escapes,
 )
-from course_notes_rag.models import ParentChunk, RetrievedChunk
+from course_notes_rag.models import BBox, ParentChunk, RetrievedChunk
 from course_notes_rag.papers import prompts
 from course_notes_rag.papers.blueprint import dice
 from course_notes_rag.papers.classify import numbers_in
@@ -66,12 +66,28 @@ DEFAULT_MARKS = {
     "algorithm": 8.0, "diagram": 8.0, "case_based": 10.0,
 }
 _NEEDS_MATH = {"numerical", "derivation"}
+_WORKED_TYPES = {"numerical", "algorithm", "derivation"}
+_COMPUTED_TYPES = {"numerical", "algorithm"}
 _ALGORITHM_HINT = re.compile(
     r"\b(?:algorithm|procedure|update|step|iteration|rule|method|solves?|search|train(?:ing|ed)?)\b",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)?")
 _DIAGRAM_WORD = re.compile(r"\b(?:draw|sketch|diagram|label)", re.IGNORECASE)
+_INLINE_EVIDENCE = re.compile(r"\s*\[S\d+(?:\s*,\s*S?\d+)*\]")
+_LATEX_ARITHMETIC = (
+    (re.compile(r"\\frac\{([^{}]+)\}\{([^{}]+)\}"), r"((\1)/(\2))"),
+    (re.compile(r"\\times|\\cdot"), "*"),
+    (re.compile(r"\\div"), "/"),
+    (re.compile(r"\\left|\\right|\\,|\\;|\\!"), ""),
+    (re.compile(r"\{"), "("),
+    (re.compile(r"\}"), ")"),
+)
+_INSTRUCTION = re.compile(
+    r"^(?:define|explain|describe|discuss|compare|contrast|summari[sz]e|identify|list|state|outline|"
+    r"mention|write|set up|use|apply|calculate|compute|verify|show|derive|draw)\b",
+    re.IGNORECASE,
+)
 
 _BINARY = {
     ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv,
@@ -182,6 +198,25 @@ def _evaluate(node: ast.AST) -> float:
     raise ValueError("not plain arithmetic")
 
 
+def _plain_arithmetic(latex: str) -> str:
+    for pattern, replacement in _LATEX_ARITHMETIC:
+        latex = pattern.sub(replacement, latex)
+    return latex
+
+
+def arithmetic_slips(text: str) -> list[str]:
+    """Equalities between plain numbers that do not hold, such as ``$4 - 0.1 \\cdot 2 = 3.2$``."""
+    segments, _errors = math_segments(text)
+    slips = []
+    for segment in segments or [text]:
+        sides = [(side.strip(), safe_eval(_plain_arithmetic(side))) for side in segment.split("=")]
+        known = [(side, value) for side, value in sides if value is not None]
+        for (left, a), (right, b) in zip(known, known[1:]):
+            if not math.isclose(a, b, rel_tol=ANSWER_REL_TOLERANCE, abs_tol=ANSWER_ABS_TOLERANCE):
+                slips.append(f"{left} is {a:.6g}, not {right}")
+    return slips
+
+
 def stated_number(text: str) -> float | None:
     """The value a final answer states: the last number, so "Using 2 steps, x = 4" gives 4."""
     found = _NUMBER.findall(re.sub(r"(?<=\d),(?=\d{3}\b)", "", text or ""))
@@ -239,6 +274,15 @@ def repair_mock_draft(draft: MockDraft, slot: Slot, parent: ParentChunk) -> tupl
     """Fix what a small model gets wrong in form without changing what the question asks."""
     repairs: list[str] = []
     d = draft.model_copy(deep=True)
+    for step in d.steps:  # "[S23]" written into the text is a citation in the wrong place
+        inline = [int(n) for m in _INLINE_EVIDENCE.findall(step.text) for n in re.findall(r"\d+", m)]
+        if inline:
+            step.text = _INLINE_EVIDENCE.sub("", step.text)
+            step.evidence_ids = list(dict.fromkeys([*step.evidence_ids, *inline]))[:3]
+            repairs.append("inline evidence moved")
+    d.final_answer = _INLINE_EVIDENCE.sub("", d.final_answer)
+    for point in d.marking:
+        point.point = _INLINE_EVIDENCE.sub("", point.point)
     fields = [(d, "question"), (d, "final_answer")] + [(s, "text") for s in d.steps]
     fields += [(p, "point") for p in d.marking]
     for obj, name in fields:
@@ -276,7 +320,7 @@ def repair_mock_draft(draft: MockDraft, slot: Slot, parent: ParentChunk) -> tupl
         repairs.append("final value added")
     if _rescale_marking(d, slot.marks):
         repairs.append("marking scaled")
-    return d, repairs
+    return d, list(dict.fromkeys(repairs))
 
 
 def check_mock_draft(
@@ -304,8 +348,23 @@ def check_mock_draft(
     kind = slot.question_type
     if kind == "numerical":
         problems.extend(_check_numerical(draft))
+    if kind in _WORKED_TYPES and not shows_working(draft):
+        problems.append(
+            "show the actual working: at least half of the solution steps must work out a new "
+            "value or equation, not repeat the question or describe what to do"
+        )
+    if kind in _COMPUTED_TYPES:
+        for step in draft.steps:
+            problems.extend(f"recompute this step: {slip}" for slip in arithmetic_slips(step.text))
+        stated = stated_number(draft.final_answer)
+        if stated is not None and not _reached(stated, draft):
+            problems.append(f"final_answer says {stated:g} but no solution step reaches that value")
     if kind in ("algorithm", "derivation") and len(draft.steps) < 2:
         problems.append(f"a {TYPE_LABELS[kind].lower()} needs at least 2 solution steps")
+    if is_outline(draft):
+        problems.append(
+            "write the answer itself: the steps tell the student what to do instead of doing it"
+        )
     if kind == "derivation" and not any("$" in s.text or "=" in s.text for s in draft.steps):
         problems.append("a derivation must show the mathematics")
     if kind == "diagram" and not _DIAGRAM_WORD.search(question):
@@ -338,6 +397,32 @@ def check_mock_draft(
             problems.append("this repeats another question in the paper; ask something different")
             break
     return problems
+
+
+def _new_working(step: str, question: str) -> bool:
+    """Does this step add anything? Equations copied from the question do not count."""
+    for segment in math_segments(step)[0]:
+        if f"${segment}$" in question:
+            step = step.replace(f"${segment}$", " ")
+    return "=" in step or bool(set(numbers_in(step)) - set(numbers_in(question)))
+
+
+def shows_working(draft: MockDraft) -> bool:
+    """A worked solution produces values. A subscript such as ``a_1`` is not a value."""
+    worked = sum(1 for s in draft.steps if _new_working(s.text, draft.question))
+    return worked * 2 >= len(draft.steps)
+
+
+def _reached(stated: float, draft: MockDraft) -> bool:
+    """The final value must come out of the working, not appear only in the answer."""
+    values = [float(n) for s in draft.steps for n in numbers_in(s.text)]
+    return any(answers_agree(stated, value) for value in values)
+
+
+def is_outline(draft: MockDraft) -> bool:
+    """Most steps are instructions, such as "Define the margin", with nothing worked out."""
+    told = sum(1 for s in draft.steps if _INSTRUCTION.match(s.text.strip()) and "=" not in s.text)
+    return told * 2 > len(draft.steps)
 
 
 def _check_numerical(draft: MockDraft) -> list[str]:
@@ -644,13 +729,25 @@ def finalize(
 ) -> dict[str, Any]:
     units = _units(parent.blocks)
     lines = []
+    highlights: list[list[BBox]] = []
     for number, step in enumerate(draft.steps, start=1):
-        pages = list(dict.fromkeys(units[i].page for i in step.evidence_ids))
-        citations = " ".join(format_citation(parent.pdf_name, page) for page in pages)
+        by_page: dict[int, list[BBox]] = {}
+        for i in step.evidence_ids:
+            boxes = by_page.setdefault(units[i].page, [])
+            box = units[i].block.bbox
+            if box is not None and box not in boxes:
+                boxes.append(box)
+        highlights.extend(by_page.values())
+        citations = " ".join(format_citation(parent.pdf_name, page) for page in by_page)
         text = step.text.strip()
         lines.append(f"{number}. {text} {citations}".rstrip())
     solution = "\n\n".join(lines)
     report = verify_citations(solution, [_as_chunk(parent)], complete=False)
+    # The cited sentences are known exactly, so show those rather than a guess from the wording.
+    for citation, boxes in zip(report.citations, highlights):
+        citation.page_supported, citation.suggested_page = True, None
+        if boxes:
+            citation.bboxes = boxes
     ids = sorted({i for s in draft.steps for i in s.evidence_ids})
     evidence, _problem = resolve_evidence(ids, parent.blocks, 1)
     computed = safe_eval(draft.answer_expression)
@@ -680,7 +777,8 @@ def finalize(
 
 __all__ = [
     "MAX_PAPER_QUESTIONS", "MAX_PRACTICE_QUESTIONS", "MockDraft", "MockGenerator",
-    "MockRequest", "MockRequestError", "Slot", "answers_agree", "assign_sections",
+    "MockRequest", "MockRequestError", "Slot", "answers_agree", "arithmetic_slips", "assign_sections",
     "check_mock_draft", "draft_schema", "ensure_applied", "finalize", "practice_slots",
-    "repair_mock_draft", "safe_eval", "stated_number", "suits", "template_slots",
+    "is_outline", "repair_mock_draft", "safe_eval", "shows_working", "stated_number", "suits",
+    "template_slots",
 ]

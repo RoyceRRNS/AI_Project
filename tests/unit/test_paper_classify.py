@@ -7,7 +7,8 @@ import pytest
 
 from course_notes_rag.generation.llm import FakeLLM, LLMError
 from course_notes_rag.papers.classify import (
-    QuestionClassifier, classify_bloom, classify_type, numbers_in, topic_query,
+    QuestionClassifier, classify_bloom, classify_type, numbers_in, strip_values, topic_queries,
+    topic_query,
 )
 
 
@@ -112,6 +113,33 @@ def test_topic_query_uses_the_shared_stem():
 
 def test_topic_query_falls_back_when_nothing_is_left():
     assert topic_query("Define") == "Define"
+
+
+def test_topic_query_drops_differentiate_between():
+    assert topic_query("Differentiate between hard and soft margin.") == "hard and soft margin"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("the variance of a Bernoulli variable when p is 0.25", "the variance of a Bernoulli variable when p is"),
+    ("Given P(D) = 0.01, P(T | D) = 0.9 and more", "Given and more"),
+    ("descent on J(theta) = theta^2 from theta = 2 with rate 0.1", "descent on J(theta) = theta^2 from with rate"),
+    ("A disease affects 2% of people", "A disease affects of people"),
+    ("replace (w, b) by (2w, 2b)", "replace (w, b) by (2w, 2b)"),
+    ("no values here", "no values here"),
+])
+def test_strip_values(text, expected):
+    assert strip_values(text) == expected
+
+
+def test_a_plain_question_needs_one_search():
+    assert topic_queries("Explain the kernel trick.") == ["the kernel trick"]
+
+
+def test_a_problem_is_also_searched_without_its_data_and_by_its_ask():
+    queries = topic_queries("A test has P(T) = 0.9 here. Calculate P(D | T) using Bayes' theorem.")
+    assert len(queries) == 3
+    assert "0.9" in queries[0] and "0.9" not in queries[1]
+    assert queries[2] == "P(D | T) using Bayes' theorem"
 
 
 def test_topic_query_is_bounded():
@@ -227,6 +255,32 @@ def test_topics_come_from_the_best_section():
     query, course, kwargs = retriever.calls[0]
     assert query == "the KKT conditions" and course == "c1"
     assert kwargs == {"top_n": 1, "threshold": 0.2, "expansion": "none"}
+
+
+def test_the_best_search_decides_the_topic():
+    class ByQuery(FakeRetriever):
+        def retrieve(self, query, course_id, **kwargs):
+            self.calls.append(query)
+            if "0.25" in query:
+                return Result([Chunk(section_title="Wrong", rerank_score=0.3)])
+            return Result([Chunk(section_title="Common Distributions", rerank_score=0.8)])
+
+    retriever = ByQuery([])
+    topics = QuestionClassifier(FakeLLM([]), retriever).map_topics(
+        [q("a", "Calculate the variance of a Bernoulli variable when p is 0.25.")], "c1"
+    )
+    assert topics["a"]["section_title"] == "Common Distributions" and len(retriever.calls) == 2
+
+
+def test_one_good_search_is_enough_to_avoid_a_false_gap():
+    class OnlyPlain(FakeRetriever):
+        def retrieve(self, query, course_id, **kwargs):
+            return Result([Chunk()] if "0.25" not in query else [])
+
+    topics = QuestionClassifier(FakeLLM([]), OnlyPlain([])).map_topics(
+        [q("a", "Calculate the variance when p is 0.25.")], "c1"
+    )
+    assert topics["a"] is not None
 
 
 def test_a_question_the_notes_do_not_cover_is_a_gap():

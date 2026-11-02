@@ -31,9 +31,11 @@ Each stored question is a leaf, the unit a student answers. A stem shared by (a)
 |---|---|
 | Question type (7) | Command-word rules. Clear cases never reach the model; ties and questions with no cue go to Qwen in batches |
 | Bloom level (6) | The level printed on the paper if there is one, otherwise verbs, with floors by question type |
-| Topic | `HybridRetriever` on the question with its command words removed, threshold 0.2 (exam wording differs from note wording). No match is reported as a gap in the notes |
+| Topic | `HybridRetriever` on the question with its command words removed, threshold 0.2 (exam wording differs from note wording). A question with data is also searched without its numbers and by its last sentence, and the best score wins. No match is reported as a gap in the notes |
 
 If the model fails, the rule labels stand and the paper still finishes.
+
+Numbers drown a question's subject for the reranker: "the variance of a Bernoulli variable when p is 0.25" scored 0.06 as written and 0.80 without the 0.25. Sections unrelated to a question score about 0.02, so trying the variants does not pull in wrong matches.
 
 ## Blueprint
 
@@ -43,8 +45,10 @@ If the model fails, the rule labels stand and the paper still finishes.
 | Expected marks | As above, weighted 0.8 per year behind the newest paper |
 | Type and Bloom mix | Share of marks |
 | Structure | Parts, pattern (5 × 2), totals, either/or and "answer any"; the most common pattern across papers |
-| Recurring questions | Clusters around a leader question, so similarity cannot chain. Near-identical wording or very high cosine links on its own; anything weaker must also be the same question type |
+| Recurring questions | Clusters around a leader question, so similarity cannot chain. Words and embeddings only shortlist pairs; `bge-reranker-v2-m3` decides, reading each pair in both directions (see below) |
 | Phrasings | Examiner templates such as "Explain … with a neat diagram", each with real questions |
+
+Embeddings alone cannot tell a repeat from a neighbouring question. "Define the geometric margin" and "Define the functional margin" score cosine 0.91, above a genuine rephrasing of an LSTM question at 0.83. Read as a pair by the cross-encoder, using the lower of the two directions, the 7 repeats measured scored at least 0.73 and the 7 different questions at most 0.69, so the line is at 0.7. That gap is narrow and comes from a small sample. The offline profile has no cross-encoder and uses word overlap and question type instead.
 
 Deleting a note section clears `parent_id` but keeps the stored title. That is how stale mappings are detected, and "Match again" re-runs the mapping.
 
@@ -62,11 +66,24 @@ Sections are drawn by weightage, without repeats while another section fits, and
 
 | Check | Rule |
 |---|---|
-| Grounding | Notes are shown as `[S#]` sentences (`generation/evidence.py`); steps cite ids, and `[Source: file.pdf, p. N]` is built from those ids, so a citation cannot name a page the model made up. `verify_citations` then produces the report the UI renders |
+| Grounding | Notes are shown as `[S#]` sentences (`generation/evidence.py`); steps cite ids, and `[Source: file.pdf, p. N]` is built from those ids, so a citation cannot name a page the model made up. `verify_citations` produces the report the UI renders, with the highlight set to the cited sentences |
 | Numerical answers | `answer_expression` is evaluated by a safe arithmetic evaluator (an AST walk, no `eval`) and must match the stated answer within 2%; it must also use numbers from the question |
+| Worked solutions | For numerical, algorithm and derivation questions, at least half the steps must produce a new value or equation; repeating the question does not count. For every type, most steps must not be instructions to the student. Qwen otherwise tends to list what to do ("set up the KKT conditions") and state an unsupported answer |
+| Step arithmetic | For numerical and algorithm questions, every equality between plain numbers in a step is recomputed, and a number in the final answer must appear in the working. This caught a trace that named its calculations and then claimed 3.2, when the answer is 3.64 |
 | Style | Each type has content checks, for example a case-based question needs a scenario of 25+ words |
 | Originality | A draft 90% like a past question, or 80% like another mock question, goes back |
-| Repair, then retry | Follows `quiz_engine.py`: fix LaTeX escapes, drop unknown or unrelated evidence, re-select evidence, scale the marking scheme; send anything else back with the list of problems, raising the temperature each retry; then try another section; then skip with a warning |
+| Repair, then retry | Follows `quiz_engine.py`: fix LaTeX escapes, turn `[S#]` written into the text into citations, drop unknown or unrelated evidence, re-select evidence, scale the marking scheme; send anything else back with the list of problems, raising the temperature each retry; then try another section; then skip with a warning |
+
+## What the checks cannot see
+
+Validation proves a solution is grounded and that its stated arithmetic is consistent. It does not prove the reasoning is right, and two live runs showed the gap:
+
+- A numerical question gave a gradient norm of 16, and the solution then used 16 as the time step. The citations were valid and the arithmetic matched.
+- A gradient descent trace went from $1 - \frac{1}{2} \cdot 2(1 - 3)$, which is 3, to $1 - 2 = -1$ in the next step. Each line holds on its own, so the checks pass, and the trace reached the right final value by accident.
+
+A model can also state a formula that is not in the notes or make a false claim in an uncited step. The UI therefore says "Arithmetic rechecked", not "correct", and a student should treat a generated solution as a draft to check against the cited pages.
+
+Topic mapping picks one section per question, so a question spanning two sections counts towards the better match. Close calls can land on the neighbouring section: the LSTM diagram question scored 0.32 for the GRU section and 0.31 for the LSTM section.
 
 ## API
 

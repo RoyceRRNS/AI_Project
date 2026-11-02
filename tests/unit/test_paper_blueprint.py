@@ -188,6 +188,63 @@ def test_the_newest_wording_represents_the_cluster():
     assert found[0]["text"] == "State Bayes' theorem now."
 
 
+class Scorer:
+    """Stands in for the cross-encoder: scores a pair by which words the two sides contain."""
+
+    name = "scripted"
+
+    def __init__(self, score):
+        self.fixed = score
+        self.calls = 0
+
+    def score(self, query, documents):
+        self.calls += 1
+        return [self.fixed(query, documents[0])]
+
+
+def test_the_cross_encoder_rejects_what_embeddings_cannot():
+    """Real figures: these two score cosine 0.91, but 0.69 as a pair."""
+    scorer = Scorer(lambda a, b: 0.69)
+    found = find_recurring([
+        q("p1", text="Define the geometric margin of a training example.", kind="definition"),
+        q("p2", text="Define the functional margin of a training example.", kind="definition"),
+    ], None, PAPERS, scorer)
+    assert found == [] and scorer.calls == 2
+
+
+def test_the_cross_encoder_confirms_a_rephrasing():
+    found = find_recurring([
+        q("p1", text="Explain with a neat diagram the structure of an LSTM cell.", kind="diagram"),
+        q("p2", text="Draw the block diagram of an LSTM cell and explain each gate.", kind="diagram"),
+    ], None, PAPERS, Scorer(lambda a, b: 0.73))
+    assert len(found) == 1
+
+
+def test_a_pair_must_agree_in_both_directions():
+    found = find_recurring([
+        q("p1", text="List the gates of an LSTM cell.", kind="definition"),
+        q("p2", text="Draw the gates of an LSTM cell.", kind="definition"),
+    ], None, PAPERS, Scorer(lambda a, b: 0.96 if a.startswith("List") else 0.5))
+    assert found == []
+
+
+def test_unrelated_questions_never_reach_the_cross_encoder():
+    scorer = Scorer(lambda a, b: 1.0)
+    found = find_recurring([
+        q("p1", text="Explain the kernel trick."), q("p2", text="Compute the clipped gradient norm."),
+    ], HashingEmbedder(), PAPERS, scorer)
+    assert found == [] and scorer.calls == 0
+
+
+def test_the_cross_encoder_links_questions_of_different_labels():
+    """Classification is not perfect: a confirmed repeat counts even if the types differ."""
+    found = find_recurring([
+        q("p1", text="Explain the role of the learning rate in gradient descent.", kind="explain_compare"),
+        q("p2", text="What is the learning rate in gradient descent?", kind="definition"),
+    ], None, PAPERS, Scorer(lambda a, b: 0.99))
+    assert len(found) == 1
+
+
 def test_recurrence_needs_at_least_two_questions():
     assert find_recurring([q()], HashingEmbedder(), PAPERS) == []
     assert find_recurring([], HashingEmbedder(), PAPERS) == []
