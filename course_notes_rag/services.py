@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from qdrant_client import QdrantClient
 
@@ -15,6 +15,7 @@ from course_notes_rag.generation.quiz_engine import QuizEngine
 from course_notes_rag.ingestion.chunker import HierarchicalChunker
 from course_notes_rag.ingestion.parser import DocumentParser, PyMuPDFParser, build_parser
 from course_notes_rag.ingestion.pipeline import IngestionService
+from course_notes_rag.papers.service import PaperService
 from course_notes_rag.retrieval.encoders import (
     CrossEncoderReranker, Embedder, HashingEmbedder, LexicalReranker, Reranker,
     SentenceTransformerEmbedder,
@@ -45,6 +46,18 @@ class Services:
     mastery: MasteryTracker
     ingestion: IngestionService
     flashcards: FlashcardEngine
+    papers: PaperService = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.papers = PaperService(
+            self.db, self.llm, self.parser, self.retriever, self.embedder, self.ingestion,
+            self.settings.storage_dir / "papers",
+            # The offline stand-in counts shared words, which cannot judge "same question".
+            reranker=None if self.settings.profile == "test" else self.reranker,
+            mastery_initial=self.settings.mastery_initial,
+            max_upload_mb=self.settings.max_upload_mb, max_retries=self.settings.quiz_max_retries,
+            temperature=self.settings.quiz_temperature,
+        )
 
     def close(self) -> None:
         self.ingestion.shutdown()

@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from course_notes_rag import __version__
+from course_notes_rag.api.papers import register_paper_routes
 from course_notes_rag.api.schemas import (
     AnswerSubmit, ChatRequest, CourseCreate, FlashcardCreate, FlashcardReview, QuizCreate, SearchRequest,
 )
@@ -117,6 +118,8 @@ def create_app(services: Services | None = None, settings: Settings | None = Non
             },
         }
 
+    register_paper_routes(app, svc, _sse, SSE_HEADERS)
+
     # --- Courses -------------------------------------------------------------
 
     @app.get("/api/courses")
@@ -146,6 +149,7 @@ def create_app(services: Services | None = None, settings: Settings | None = Non
     @app.delete("/api/courses/{course_id}", status_code=204)
     def delete_course(course_id: str) -> None:
         svc().ingestion.delete_course(course_id)
+        svc().papers.delete_course_files(course_id)
 
     # --- Documents -----------------------------------------------------------
 

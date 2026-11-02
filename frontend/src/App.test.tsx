@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { papersApi } from "./papersApi";
 import { mockBackend } from "./test/backend";
 import { course, health, renderWithStore } from "./test/fixtures";
 
@@ -42,15 +43,20 @@ describe("App", () => {
 
   it("navigates tabs with the mouse and arrow keys and remembers the tab", async () => {
     mockBackend();
+    vi.spyOn(papersApi, "list").mockResolvedValue([]);
     renderWithStore(<App />, { toasts: false });
     const library = await screen.findByRole("tab", { name: /Library/ });
     fireEvent.click(screen.getByRole("tab", { name: /Quiz/ }));
     expect(screen.getByRole("tab", { name: /Quiz/ })).toHaveAttribute("aria-selected", "true");
+    const papers = screen.getByRole("tab", { name: /Papers/ });
     fireEvent.keyDown(screen.getByRole("tab", { name: /Quiz/ }), { key: "ArrowRight" });
+    expect(papers).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(papers, { key: "ArrowRight" });
     expect(library).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(library, { key: "ArrowLeft" });
-    expect(screen.getByRole("tab", { name: /Quiz/ })).toHaveAttribute("aria-selected", "true");
-    expect(localStorage.getItem("cnr.tab")).toBe("quiz");
+    expect(papers).toHaveAttribute("aria-selected", "true");
+    expect(localStorage.getItem("cnr.tab")).toBe("papers");
+    expect(await screen.findByTestId("paper-dropzone")).toBeInTheDocument();
   });
 
   it("opens the split-screen PDF viewer from the library", async () => {

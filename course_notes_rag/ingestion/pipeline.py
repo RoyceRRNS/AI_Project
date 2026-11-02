@@ -6,6 +6,7 @@ import hashlib
 import logging
 import re
 import threading
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,10 @@ class IngestionService:
             future = self._executor.submit(self.process, document_id)
             self._futures[document_id] = future
             return future
+
+    def run_job(self, fn: Callable[..., Any], *args: Any) -> Future:
+        """Queue other model work behind ingestion, on the same worker: the GPU is shared."""
+        return self._executor.submit(fn, *args)
 
     def wait(self, document_id: str, timeout: float | None = None) -> None:
         with self._lock:

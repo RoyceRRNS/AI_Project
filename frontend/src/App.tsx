@@ -1,12 +1,13 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  BookOpen, Brain, ChevronDown, Layers, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon, Plus,
-  Sparkles, Sun, Trash2,
+  BookOpen, Brain, ChevronDown, FileStack, Layers, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon,
+  Plus, Sparkles, Sun, Trash2,
 } from "lucide-react";
 import { api } from "./api";
 import { Chat } from "./components/Chat";
 import { Flashcards } from "./components/Flashcards";
 import { EmptyCourses, Library } from "./components/Library";
+import { Papers } from "./components/Papers";
 import { Quiz } from "./components/Quiz";
 import { Toasts } from "./components/Toasts";
 import { storage, useStore } from "./store";
@@ -40,13 +41,14 @@ class ViewerBoundary extends Component<{ onClose: () => void; children: ReactNod
   }
 }
 
-export type Tab = "library" | "chat" | "flashcards" | "quiz";
+export type Tab = "library" | "chat" | "flashcards" | "quiz" | "papers";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "library", label: "Library", icon: LibraryIcon },
   { id: "chat", label: "Chat", icon: MessagesSquare },
   { id: "flashcards", label: "Flashcards", icon: Layers },
   { id: "quiz", label: "Quiz", icon: Brain },
+  { id: "papers", label: "Papers", icon: FileStack },
 ];
 
 export default function App() {
@@ -110,6 +112,7 @@ export default function App() {
               {tab === "chat" && <Chat key={course.id} />}
               {tab === "flashcards" && <Flashcards key={course.id} />}
               {tab === "quiz" && <Quiz key={course.id} />}
+              {tab === "papers" && <Papers key={course.id} />}
             </div>
           </section>
           {viewer && (
