@@ -2,7 +2,8 @@
 
 Upload lecture PDFs, Beamer slides or scanned handwritten notes; ask questions and get answers
 that cite the exact page (click a citation to see the paragraph highlighted in the PDF); practise
-with Bloom's-taxonomy quizzes that adapt to your weak sections.
+with Bloom's-taxonomy quizzes that adapt to your weak sections, and revise every formula and key point
+with spaced-repetition flashcards.
 
 ```
 PDF ─► Docling (layout, tables, OCR, formula→LaTeX) ─► parent/child chunks ─► SQLite
@@ -60,7 +61,7 @@ or Ollama needed. Every setting in `course_notes_rag/config/settings.py` can be 
 | Suite | Command | What it covers |
 |---|---|---|
 | Backend unit | `.venv/Scripts/python -m pytest tests/unit` | every module, positive and negative cases |
-| Backend e2e | `.venv/Scripts/python -m pytest tests/e2e` | 14 user journeys over HTTP through the whole stack (test profile) |
+| Backend e2e | `.venv/Scripts/python -m pytest tests/e2e` | 17 user journeys over HTTP through the whole stack (test profile) |
 | Live stack | `.venv/Scripts/python -m pytest -m live` | Docling, BGE-M3, reranker, Qwen: ingestion, 10-question benchmark, chat, quiz |
 | Frontend unit | `npm --prefix frontend test` | components, SSE parser, citation rendering |
 | UI e2e | `npm --prefix frontend run e2e` | Playwright: real browser against a real backend (desktop + mobile) |
@@ -97,6 +98,19 @@ Every streamed answer is checked after generation (`generation/citations.py`):
 3. **Highlight** — the chip opens the PDF with the single paragraph that best matches the claim highlighted.
 4. **Completion** — sentences the model left uncited are matched against the retrieved passages; a strong match gets an `auto` citation, anything else is reported as an *unsupported claim* (a hallucination signal shown on the answer's badge).
 
+## Flashcards
+
+The Flashcards tab builds a deck from a course's notes (`generation/flashcards.py`):
+
+- **Formula cards.** Every display formula becomes a card whose back is the LaTeX from the parsed PDF, copied verbatim. Qwen only writes the question on the front. If it skips a formula, the card is still made, with the sentence before the formula as its prompt; a front that gives the formula away is rejected.
+- **Key-point cards.** Qwen writes up to 6 per section for definitions, conditions and results. Each cites its `[S#]` note sentences and is dropped unless they contain at least 25% of the answer's terms (the same check quizzes use) and every math symbol and number in the answer.
+- **Review.** Leitner boxes 1–5. "Got it" moves a card up a box (next review in 1, 3, 7, then 14 days); "Again" returns it to box 1 and repeats it in the session. Reviews do not change quiz mastery.
+- **Upkeep.** A section is generated once. A section whose key points failed is retried, "Add cards for new notes" only covers sections not done yet, and "Rebuild deck" replaces cards and their review progress. Re-processing or deleting a document removes its cards.
+
+Cards are only as accurate as the parse: a misread formula or a shifted table reaches the card unchanged, and these checks compare words and symbols, not meaning. Every card links to its source page, so check anything that looks wrong against the PDF.
+
+Endpoints: `GET /api/courses/{id}/flashcards`, `POST /api/courses/{id}/flashcards` (SSE), `POST /api/flashcards/{id}/review`.
+
 ## Acceptance criteria → implementation → tests
 
 | AC | Where | Tests |
@@ -122,7 +136,7 @@ course_notes_rag/
   config/settings.py      model names, chunk sizes, thresholds, paths (CNR_* env overrides)
   ingestion/              parser.py · chunker.py · pipeline.py (background jobs, status)
   retrieval/              encoders.py · indexer.py · sparse.py · lexical.py · fusion.py · search.py
-  generation/             llm.py · prompts.py · chat_engine.py · citations.py · quiz_engine.py · latex.py
+  generation/             llm.py · prompts.py · chat_engine.py · citations.py · flashcards.py · quiz_engine.py · latex.py
   tracking/mastery.py     mastery update rule and adaptive sampling
   storage/db.py           SQLite schema and queries
   api/server.py           FastAPI (+ serves the built UI)

@@ -108,6 +108,32 @@ CREATE TABLE IF NOT EXISTS attempts (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_attempts_quiz ON attempts(quiz_id, question_id);
+CREATE TABLE IF NOT EXISTS flashcards (
+    id TEXT PRIMARY KEY,
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+    document_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    front TEXT NOT NULL,
+    back TEXT NOT NULL,
+    source_quote TEXT NOT NULL,
+    source_page INTEGER NOT NULL,
+    bboxes TEXT NOT NULL,
+    ord INTEGER NOT NULL,
+    box INTEGER NOT NULL DEFAULT 1,
+    reviews INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    due_at TEXT,
+    last_reviewed_at TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_flashcards_course ON flashcards(course_id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_parent ON flashcards(parent_id);
+CREATE TABLE IF NOT EXISTS flashcard_sections (
+    parent_id TEXT PRIMARY KEY REFERENCES parents(id) ON DELETE CASCADE,
+    course_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -464,6 +490,81 @@ class Database:
         )
         return [dict(r) | {"is_correct": bool(r["is_correct"])} for r in rows]
 
+    # --- Flashcards ------------------------------------------------------------
+
+    _FLASHCARD_SELECT = """SELECT f.*, p.section_title, p.lecture_title, p.pdf_name
+                           FROM flashcards f JOIN parents p ON p.id = f.parent_id
+                           JOIN documents d ON d.id = f.document_id"""
+
+    def add_flashcards(self, parent: ParentChunk, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Store new cards for one section; each card has kind, front, back, source_quote,
+        source_page and bboxes. Returns the stored rows in order."""
+        if not cards:
+            return []
+        now = _now()
+        ids = [new_id() for _ in cards]
+        with self.transaction() as conn:
+            conn.executemany(
+                """INSERT INTO flashcards (id, course_id, parent_id, document_id, kind, front, back,
+                       source_quote, source_page, bboxes, ord, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                [
+                    (
+                        card_id, parent.course_id, parent.parent_id, parent.document_id, c["kind"],
+                        c["front"], c["back"], c["source_quote"], c["source_page"],
+                        json.dumps(c["bboxes"]), i, now,
+                    )
+                    for i, (card_id, c) in enumerate(zip(ids, cards))
+                ],
+            )
+        stored = self._query(f"{self._FLASHCARD_SELECT} WHERE f.id IN ({','.join('?' * len(ids))})", ids)
+        by_id = {r["id"]: r for r in stored}
+        return [_flashcard_row(by_id[i]) for i in ids]
+
+    def list_flashcards(self, course_id: str) -> list[dict[str, Any]]:
+        rows = self._query(
+            f"""{self._FLASHCARD_SELECT} WHERE f.course_id = ? AND d.status = 'ready'
+                ORDER BY d.created_at, p.ord, f.ord""",
+            (course_id,),
+        )
+        return [_flashcard_row(r) for r in rows]
+
+    def get_flashcard(self, card_id: str) -> dict[str, Any]:
+        rows = self._query(f"{self._FLASHCARD_SELECT} WHERE f.id = ?", (card_id,))
+        if not rows:
+            raise NotFoundError(f"Flashcard {card_id} not found")
+        return _flashcard_row(rows[0])
+
+    def flashcard_sections_done(self, course_id: str) -> set[str]:
+        """Sections whose cards were made without problems, so they are not generated again."""
+        rows = self._query("SELECT parent_id FROM flashcard_sections WHERE course_id = ?", (course_id,))
+        return {r["parent_id"] for r in rows}
+
+    def mark_flashcard_section(self, parent: ParentChunk) -> None:
+        self._execute(
+            "INSERT OR REPLACE INTO flashcard_sections (parent_id, course_id, created_at) VALUES (?, ?, ?)",
+            (parent.parent_id, parent.course_id, _now()),
+        )
+
+    def delete_flashcards(self, parent_ids: list[str]) -> int:
+        """Remove the cards of these sections and forget that they were generated."""
+        if not parent_ids:
+            return 0
+        placeholders = ",".join("?" * len(parent_ids))
+        with self.transaction() as conn:
+            conn.execute(f"DELETE FROM flashcard_sections WHERE parent_id IN ({placeholders})", parent_ids)
+            return conn.execute(f"DELETE FROM flashcards WHERE parent_id IN ({placeholders})", parent_ids).rowcount
+
+    def record_flashcard_review(self, card_id: str, *, box: int, due_at: str, lapse: bool) -> dict[str, Any]:
+        cur = self._execute(
+            """UPDATE flashcards SET box = ?, due_at = ?, reviews = reviews + 1,
+                   lapses = lapses + ?, last_reviewed_at = ? WHERE id = ?""",
+            (box, due_at, int(lapse), _now(), card_id),
+        )
+        if cur.rowcount == 0:
+            raise NotFoundError(f"Flashcard {card_id} not found")
+        return self.get_flashcard(card_id)
+
 
 def _course_row(row: sqlite3.Row) -> dict[str, Any]:
     data = dict(row)
@@ -512,6 +613,12 @@ def _child_row(row: sqlite3.Row) -> ChildChunk:
         token_count=row["token_count"],
         ord=row["ord"],
     )
+
+
+def _flashcard_row(row: sqlite3.Row) -> dict[str, Any]:
+    data = dict(row)
+    data["bboxes"] = json.loads(data["bboxes"])
+    return data
 
 
 def _question_row(row: sqlite3.Row) -> dict[str, Any]:

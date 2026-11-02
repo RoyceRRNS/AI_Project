@@ -264,3 +264,68 @@ def test_uc12_sample_course_onboarding(client):
     assert all(d["status"] == "ready" for d in docs)
     _, by_name, _ = chat(client, body["course"]["id"], "What is the kernel trick?")
     assert by_name["sources"][0]["sources"][0]["pdf_name"] == SVM
+
+
+# --- UC13: revise formulas and key points with flashcards -----------------------------------
+
+
+def make_deck(client, course_id, **body):
+    resp = client.post(f"/api/courses/{course_id}/flashcards", json=body)
+    assert resp.status_code == 200, resp.text
+    return parse_sse(resp.text)
+
+
+def test_uc13_flashcards_cover_formulas_and_key_points_and_schedule_reviews(client, library):
+    cid = library["course"]["id"]
+    events = make_deck(client, cid)
+    assert [n for n, _ in events if n == "error"] == []
+    deck = client.get(f"/api/courses/{cid}/flashcards").json()
+    assert deck["stats"]["formulas"] >= 3 and deck["stats"]["points"] >= 3
+    assert deck["stats"]["due"] == deck["stats"]["total"] == events[-1][1]["created"]
+
+    # Every card points to a page of a real document, and formulas are the notes' own LaTeX.
+    markdown = {d["id"]: client.get(f"/api/documents/{d['id']}/markdown").json()["markdown"]
+                for d in library["docs"].values()}
+    for card in deck["cards"]:
+        doc = library["docs"][card["pdf_name"]]
+        assert card["document_id"] == doc["id"] and 1 <= card["source_page"] <= doc["num_pages"]
+        assert card["front"].strip() and card["source_quote"].strip()
+        if card["kind"] == "formula":
+            assert card["back"] in markdown[doc["id"]]
+    assert len({c["id"] for c in deck["cards"]}) == deck["stats"]["total"]
+
+    # Knowing a card pushes it out; forgetting brings it straight back.
+    first, second = deck["cards"][:2]
+    assert client.post(f"/api/flashcards/{first['id']}/review", json={"result": "good"}).json()["due"] is False
+    assert client.post(f"/api/flashcards/{second['id']}/review", json={"result": "again"}).json()["due"] is True
+    stats = client.get(f"/api/courses/{cid}/flashcards").json()["stats"]
+    assert stats["due"] == stats["total"] - 1 and stats["by_box"]["2"] == 1 and stats["next_due_at"]
+
+    # Generating again keeps progress.
+    again = make_deck(client, cid)
+    assert again[-1][1]["created"] == 0
+    kept = next(c for c in client.get(f"/api/courses/{cid}/flashcards").json()["cards"] if c["id"] == first["id"])
+    assert kept["box"] == 2
+
+
+def test_uc13b_new_notes_extend_the_deck_and_removed_notes_leave_it(client, library):
+    cid = library["course"]["id"]
+    svm = library["docs"][SVM]
+    make_deck(client, cid, document_ids=[svm["id"]])
+    only_svm = client.get(f"/api/courses/{cid}/flashcards").json()
+    assert {c["pdf_name"] for c in only_svm["cards"]} == {SVM}
+
+    more = make_deck(client, cid)
+    assert more[0][1]["skipped"] >= 1 and more[-1][1]["created"] > 0
+    assert {c["pdf_name"] for c in client.get(f"/api/courses/{cid}/flashcards").json()["cards"]} > {SVM}
+
+    assert client.delete(f"/api/documents/{svm['id']}").status_code == 204
+    left = client.get(f"/api/courses/{cid}/flashcards").json()["cards"]
+    assert left and SVM not in {c["pdf_name"] for c in left}
+
+
+def test_uc13c_flashcards_stay_within_their_course(client, library):
+    other = client.post("/api/courses", json={"name": "Other"}).json()
+    make_deck(client, library["course"]["id"])
+    assert client.get(f"/api/courses/{other['id']}/flashcards").json()["cards"] == []
+    assert client.post(f"/api/courses/{other['id']}/flashcards", json={}).status_code == 400

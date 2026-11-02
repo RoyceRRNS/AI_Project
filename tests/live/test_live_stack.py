@@ -100,6 +100,39 @@ def test_quiz_generation_with_qwen(live):
         def flat(s: str) -> str:  # formulas are quoted inline ($...$) but stored as $$...$$
             return " ".join(s.replace("$", " ").split()).lower()
 
-        assert flat(q.source_quote) in flat(parent.text)
+        # A quote may join sentences that are not adjacent, but every word is from the section.
+        assert set(flat(q.source_quote).split()) <= set(flat(parent.text).split())
         graded = s.quiz.answer(quiz_id, q.question_id, q.correct_label)
         assert graded["is_correct"] and graded["mastery_updated"]
+
+
+def test_flashcards_with_qwen(live):
+    s = live["services"]
+    events = list(s.flashcards.generate(live["course_id"]))
+    errors = [e.data for e in events if e.type == "error"]
+    assert not errors, errors
+    warnings = [e.data["message"] for e in events if e.type == "warning"]
+    deck = s.flashcards.deck(live["course_id"])
+    stats = deck["stats"]
+    print(f"\n{stats['total']} cards: {stats['formulas']} formulas, {stats['points']} key points; warnings: {warnings}")
+    for card in deck["cards"][:12]:
+        print(f"[{card['kind']}] {card['front']}\n  -> {' '.join(card['back'].split())[:120]}  (p.{card['source_page']})")
+    assert stats["formulas"] >= 3 and stats["points"] >= 3
+
+    def flat(text: str) -> str:  # formulas are quoted inline ($...$) but stored as $$...$$
+        return " ".join(text.replace("$", " ").split()).lower()
+
+    parents = {p.parent_id: p for p in s.db.list_parents(live["course_id"])}
+    named = 0
+    for card in deck["cards"]:
+        parent = parents[card["parent_id"]]
+        # A quote may join sentences that are not adjacent, but every word is from the section.
+        assert set(flat(card["source_quote"]).split()) <= set(flat(parent.text).split())
+        if card["kind"] == "formula":
+            assert card["back"] in [b.to_markdown() for b in parent.blocks if b.type == "formula"]
+            assert card["back"].strip("$\n ") not in card["front"]
+            named += not card["front"].startswith("State the formula")
+    assert named >= stats["formulas"] / 2, "Qwen should name most formulas"
+
+    reviewed = s.flashcards.review(deck["cards"][0]["id"], "good")
+    assert reviewed["box"] == 2 and not reviewed["due"]

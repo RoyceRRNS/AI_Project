@@ -61,3 +61,12 @@ class QuizCreate(BaseModel):
 
 class AnswerSubmit(BaseModel):
     label: Literal["A", "B", "C", "D"]
+
+
+class FlashcardCreate(BaseModel):
+    document_ids: list[str] | None = None
+    regenerate: bool = False
+
+
+class FlashcardReview(BaseModel):
+    result: Literal["again", "good"]

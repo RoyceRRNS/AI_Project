@@ -138,6 +138,63 @@ test("quiz: generate, answer by keyboard, review explanations, mastery updates a
   await expect(page.locator(".overall")).toContainText(/[1-3]\/\d+ sections practised/);
 });
 
+test("flashcards: make a deck, flip by keyboard, grade cards and open the source page", async ({ page, request }) => {
+  const courseId = await sampleCourse(request);
+  await openCourse(page, courseId, "flashcards");
+  await expect(page.getByRole("heading", { name: "Flashcards" })).toBeVisible();
+  await page.getByRole("button", { name: /Make flashcards/ }).click();
+  await expect(page.getByText(/Made \d+ new cards/)).toBeVisible();
+  const summary = page.getByLabel("Deck summary");
+  await expect(summary).toContainText("formulas");
+  await expect(summary).toContainText("key points");
+
+  // Browse and filter: every formula renders as math.
+  await page.getByRole("button", { name: "Formulas", exact: true }).click();
+  await page.getByRole("button", { name: /^Browse \d+ cards/ }).click();
+  const tiles = page.getByTestId("card-tile");
+  await expect(tiles.first()).toBeVisible();
+  const formulaCount = await tiles.count();
+  expect(formulaCount).toBeGreaterThan(0);
+  await expect(page.locator(".fc-tile-back .katex-display")).toHaveCount(formulaCount);
+  await expect(page.locator(".fc-tile-back .katex-error")).toHaveCount(0);
+
+  // Study the formulas: the answer stays hidden until the card is flipped.
+  await page.getByRole("button", { name: new RegExp(`Study ${formulaCount} due`) }).click();
+  await expect(page.getByText(`Card 1 of ${formulaCount}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Got it/ })).toHaveCount(0);
+  await page.keyboard.press("2");
+  await expect(page.getByText(`Card 1 of ${formulaCount}`)).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(page.getByTestId("flashcard")).toHaveClass(/flipped/);
+  await expect(page.getByTestId("card-back").locator(".katex").first()).toBeVisible();
+
+  // The source link opens the highlighted page.
+  await page.locator(".fc-after").getByRole("button", { name: /· p\. \d+/ }).click();
+  const viewer = page.getByRole("complementary", { name: "PDF viewer" });
+  await expect(viewer.locator("canvas")).toBeVisible();
+  await expect(viewer.getByTestId("pdf-highlight").first()).toBeVisible();
+  await viewer.getByRole("button", { name: "Close viewer" }).click();
+  await expect(viewer).toBeHidden();
+
+  // "Again" brings the card back at the end of the session; "Got it" moves on.
+  await page.keyboard.press("1");
+  await expect(page.getByText(`Card 2 of ${formulaCount + 1}`)).toBeVisible();
+  for (let i = 2; i <= formulaCount + 1; i++) {
+    await expect(page.getByText(`Card ${i} of ${formulaCount + 1}`)).toBeVisible();
+    await page.keyboard.press("Space");
+    await expect(page.getByTestId("flashcard")).toHaveClass(/flipped/);
+    await page.keyboard.press("2");
+  }
+  await expect(page.getByTestId("session-done")).toContainText(`${formulaCount} known · 1 to review again`);
+  await page.getByRole("button", { name: "Back to deck" }).click();
+
+  // Progress survives a reload: the known cards are no longer due.
+  await page.reload();
+  await page.getByRole("button", { name: "Formulas", exact: true }).click();
+  await expect(page.getByLabel("Deck summary")).toContainText("0due now");
+  await expect(page.getByTestId("caught-up")).toContainText("All caught up");
+});
+
 test("weak spots: practise a section straight from the mastery panel", async ({ page, request }) => {
   const courseId = await sampleCourse(request);
   await openCourse(page, courseId, "quiz");

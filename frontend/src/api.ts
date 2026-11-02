@@ -163,6 +163,45 @@ export interface QuizRequestBody {
   adaptive: boolean;
 }
 
+export type CardKind = "formula" | "point";
+export type ReviewResult = "again" | "good";
+
+export interface Flashcard {
+  id: string;
+  course_id: string;
+  parent_id: string;
+  document_id: string;
+  kind: CardKind;
+  front: string;
+  back: string;
+  source_quote: string;
+  source_page: number;
+  bboxes: BBox[];
+  pdf_name: string;
+  section_title: string;
+  lecture_title: string;
+  /** Leitner box, 1 (new or forgotten) to 5 (well known). */
+  box: number;
+  reviews: number;
+  lapses: number;
+  due_at: string | null;
+  last_reviewed_at: string | null;
+  due: boolean;
+}
+
+export interface FlashcardDeck {
+  course_id: string;
+  cards: Flashcard[];
+  stats: {
+    total: number;
+    due: number;
+    formulas: number;
+    points: number;
+    by_box: Record<string, number>;
+    next_due_at: string | null;
+  };
+}
+
 export interface ChatTurn { role: "user" | "assistant"; content: string }
 
 const BASE = "/api";
@@ -207,4 +246,13 @@ export const api = {
   ) => streamSSE(`${BASE}/chat`, body, onEvent, signal),
   quiz: (body: QuizRequestBody, onEvent: (e: SSEEvent) => void, signal?: AbortSignal) =>
     streamSSE(`${BASE}/quiz`, body, onEvent, signal),
+  flashcards: (courseId: string) => request<FlashcardDeck>(`/courses/${courseId}/flashcards`),
+  generateFlashcards: (
+    courseId: string,
+    body: { document_ids?: string[] | null; regenerate?: boolean },
+    onEvent: (e: SSEEvent) => void,
+    signal?: AbortSignal,
+  ) => streamSSE(`${BASE}/courses/${courseId}/flashcards`, body, onEvent, signal),
+  reviewFlashcard: (cardId: string, result: ReviewResult) =>
+    request<Flashcard>(`/flashcards/${cardId}/review`, json({ result })),
 };

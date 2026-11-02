@@ -1,10 +1,11 @@
 import { Component, lazy, Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
-  BookOpen, Brain, ChevronDown, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon, Plus, Sparkles,
-  Sun, Trash2,
+  BookOpen, Brain, ChevronDown, Layers, Library as LibraryIcon, Loader2, MessagesSquare, Monitor, Moon, Plus,
+  Sparkles, Sun, Trash2,
 } from "lucide-react";
 import { api } from "./api";
 import { Chat } from "./components/Chat";
+import { Flashcards } from "./components/Flashcards";
 import { EmptyCourses, Library } from "./components/Library";
 import { Quiz } from "./components/Quiz";
 import { Toasts } from "./components/Toasts";
@@ -39,11 +40,12 @@ class ViewerBoundary extends Component<{ onClose: () => void; children: ReactNod
   }
 }
 
-export type Tab = "library" | "chat" | "quiz";
+export type Tab = "library" | "chat" | "flashcards" | "quiz";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "library", label: "Library", icon: LibraryIcon },
   { id: "chat", label: "Chat", icon: MessagesSquare },
+  { id: "flashcards", label: "Flashcards", icon: Layers },
   { id: "quiz", label: "Quiz", icon: Brain },
 ];
 
@@ -106,6 +108,7 @@ export default function App() {
             <div className="panel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
               {tab === "library" && <Library />}
               {tab === "chat" && <Chat key={course.id} />}
+              {tab === "flashcards" && <Flashcards key={course.id} />}
               {tab === "quiz" && <Quiz key={course.id} />}
             </div>
           </section>

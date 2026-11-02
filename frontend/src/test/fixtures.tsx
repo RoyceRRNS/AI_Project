@@ -1,7 +1,9 @@
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { vi } from "vitest";
-import type { AnswerResult, Course, DocumentInfo, Health, MasterySummary, PublicQuestion, Source } from "../api";
+import type {
+  AnswerResult, Course, DocumentInfo, Flashcard, FlashcardDeck, Health, MasterySummary, PublicQuestion, Source,
+} from "../api";
 import type { SSEEvent } from "../sse";
 import { Toasts } from "../components/Toasts";
 import { StoreProvider } from "../store";
@@ -57,6 +59,28 @@ export const graded = (qid: number, selected: string, correct = "B", over: Parti
   source_quote: "Complementary slackness requires the product to vanish.", source_pdf: "Lecture_04_SVMs.pdf",
   source_page: 2, source_bboxes: [{ page: 2, x0: 1, y0: 2, x1: 3, y1: 4 }], document_id: "d1",
   section_title: "KKT Conditions", ...over,
+});
+
+export const flashcard = (over: Partial<Flashcard> = {}): Flashcard => ({
+  id: "f1", course_id: "c1", parent_id: "p1", document_id: "d1", kind: "formula",
+  front: "State the geometric margin.", back: "$$\n\\gamma = 1 / \\Vert w \\Vert\n$$",
+  source_quote: "The margin is the distance from a point to the boundary.", source_page: 2,
+  bboxes: [{ page: 2, x0: 1, y0: 2, x1: 3, y1: 4 }], pdf_name: "Lecture_04_SVMs.pdf",
+  section_title: "3 Optimal Margin", lecture_title: "Lecture 4", box: 1, reviews: 0, lapses: 0,
+  due_at: null, last_reviewed_at: null, due: true, ...over,
+});
+
+export const deckOf = (cards: Flashcard[], nextDue: string | null = null): FlashcardDeck => ({
+  course_id: "c1",
+  cards,
+  stats: {
+    total: cards.length,
+    due: cards.filter((c) => c.due).length,
+    formulas: cards.filter((c) => c.kind === "formula").length,
+    points: cards.filter((c) => c.kind === "point").length,
+    by_box: {},
+    next_due_at: nextDue,
+  },
 });
 
 /** Makes a fake streaming endpoint that replays the given events. */

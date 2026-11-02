@@ -8,6 +8,7 @@ from qdrant_client import QdrantClient
 
 from course_notes_rag.config.settings import Settings
 from course_notes_rag.generation.chat_engine import GroundedChatEngine
+from course_notes_rag.generation.flashcards import FlashcardEngine
 from course_notes_rag.generation.llm import LLMClient, OllamaClient, OpenAICompatClient
 from course_notes_rag.generation.offline_llm import ExtractiveLLM
 from course_notes_rag.generation.quiz_engine import QuizEngine
@@ -43,6 +44,7 @@ class Services:
     quiz: QuizEngine
     mastery: MasteryTracker
     ingestion: IngestionService
+    flashcards: FlashcardEngine
 
     def close(self) -> None:
         self.ingestion.shutdown()
@@ -127,5 +129,6 @@ def build_services(
     ingestion = IngestionService(
         db, parser, chunker, indexer, settings.uploads_dir, max_upload_mb=settings.max_upload_mb
     )
+    flashcards = FlashcardEngine(db, llm)
     return Services(settings, db, qdrant, embedder, reranker, llm, parser, chunker, sparse,
-                    indexer, retriever, chat, quiz, mastery, ingestion)
+                    indexer, retriever, chat, quiz, mastery, ingestion, flashcards)

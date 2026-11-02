@@ -30,7 +30,7 @@ export async function sampleCourse(request: APIRequestContext): Promise<string> 
 }
 
 /** Opens the app with the given course selected and a given tab active. */
-export async function openCourse(page: Page, courseId: string, tab: "library" | "chat" | "quiz" = "library") {
+export async function openCourse(page: Page, courseId: string, tab: "library" | "chat" | "flashcards" | "quiz" = "library") {
   await page.addInitScript(
     ([id, t]) => {
       if (!sessionStorage.getItem("e2e-init")) {

@@ -231,3 +231,49 @@ def test_spa_serves_module_and_wasm_files_with_types_browsers_accept(services, t
         wasm = c.get("/pdfjs/wasm/openjpeg.wasm")
         assert wasm.status_code == 200 and wasm.headers["content-type"] == "application/wasm"
         assert c.get("/assets/missing.mjs").status_code == 404
+
+
+# --- Flashcards ---------------------------------------------------------------------------
+
+
+def test_flashcards_generate_list_and_review(client, services, course, sample_pdfs):
+    doc = upload(client, course["id"], SVM, sample_pdfs[SVM].read_bytes()).json()["documents"][0]
+    assert wait_ready(services, doc["id"])["status"] == "ready"
+    assert client.get(f"/api/courses/{course['id']}/flashcards").json()["cards"] == []
+
+    resp = client.post(f"/api/courses/{course['id']}/flashcards", json={})
+    assert resp.status_code == 200 and resp.headers["content-type"].startswith("text/event-stream")
+    events = parse_sse(resp.text)
+    assert events[0][0] == "deck" and events[-1][0] == "done"
+    streamed = [c for name, data in events if name == "cards" for c in data["cards"]]
+    assert streamed and all(c["due"] and c["box"] == 1 for c in streamed)
+
+    deck = client.get(f"/api/courses/{course['id']}/flashcards").json()
+    assert deck["stats"]["total"] == len(streamed) == events[-1][1]["created"]
+    assert deck["stats"]["next_due_at"] is None
+    card = next(c for c in deck["cards"] if c["kind"] == "formula")
+    assert card["back"].startswith("$$") and card["pdf_name"] == SVM and card["section_title"]
+    assert card["bboxes"] and card["document_id"] == doc["id"]
+
+    good = client.post(f"/api/flashcards/{card['id']}/review", json={"result": "good"})
+    assert good.status_code == 200 and good.json()["box"] == 2 and good.json()["due"] is False
+    assert client.get(f"/api/courses/{course['id']}/flashcards").json()["stats"]["next_due_at"] == good.json()["due_at"]
+    again = client.post(f"/api/flashcards/{card['id']}/review", json={"result": "again"}).json()
+    assert again["box"] == 1 and again["due"] is True and again["lapses"] == 1
+
+    rerun = parse_sse(client.post(f"/api/courses/{course['id']}/flashcards", json={}).text)
+    assert rerun[0][1]["sections"] == 0 and rerun[-1][1]["created"] == 0
+    rebuilt = parse_sse(client.post(f"/api/courses/{course['id']}/flashcards", json={"regenerate": True}).text)
+    assert rebuilt[-1][1]["created"] == len(streamed)
+    fresh = client.get(f"/api/courses/{course['id']}/flashcards").json()["cards"]
+    assert all(c["reviews"] == 0 for c in fresh)
+
+
+def test_flashcard_errors(client, course):
+    empty = client.post(f"/api/courses/{course['id']}/flashcards", json={})
+    assert empty.status_code == 400 and "Upload notes" in empty.json()["detail"]
+    assert client.post("/api/courses/missing/flashcards", json={}).status_code == 404
+    assert client.get("/api/courses/missing/flashcards").status_code == 404
+    assert client.post("/api/flashcards/missing/review", json={"result": "good"}).status_code == 404
+    assert client.post("/api/flashcards/missing/review", json={"result": "maybe"}).status_code == 422
+    assert client.post("/api/flashcards/missing/review", json={}).status_code == 422

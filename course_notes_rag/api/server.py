@@ -19,10 +19,11 @@ from starlette.concurrency import run_in_threadpool
 
 from course_notes_rag import __version__
 from course_notes_rag.api.schemas import (
-    AnswerSubmit, ChatRequest, CourseCreate, QuizCreate, SearchRequest,
+    AnswerSubmit, ChatRequest, CourseCreate, FlashcardCreate, FlashcardReview, QuizCreate, SearchRequest,
 )
 from course_notes_rag.config.settings import Settings
 from course_notes_rag.generation.chat_engine import ChatRequestError
+from course_notes_rag.generation.flashcards import FlashcardRequestError
 from course_notes_rag.generation.quiz_engine import QuizRequest, QuizRequestError
 from course_notes_rag.ingestion.pipeline import UploadError
 from course_notes_rag.services import Services, build_services
@@ -84,6 +85,10 @@ def create_app(services: Services | None = None, settings: Settings | None = Non
 
     @app.exception_handler(ChatRequestError)
     async def _chat_err(_request: Request, exc: ChatRequestError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(FlashcardRequestError)
+    async def _flashcard_err(_request: Request, exc: FlashcardRequestError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
     # --- Health --------------------------------------------------------------
@@ -267,6 +272,27 @@ def create_app(services: Services | None = None, settings: Settings | None = Non
         s = svc()
         s.db.get_course(course_id)
         return s.mastery.course_summary(course_id)
+
+    # --- Flashcards ----------------------------------------------------------
+
+    @app.get("/api/courses/{course_id}/flashcards")
+    def list_flashcards(course_id: str) -> dict[str, Any]:
+        return svc().flashcards.deck(course_id)
+
+    @app.post("/api/courses/{course_id}/flashcards")
+    async def generate_flashcards(course_id: str, body: FlashcardCreate) -> StreamingResponse:
+        events = svc().flashcards.generate(
+            course_id, document_ids=body.document_ids, regenerate=body.regenerate
+        )
+        first = await run_in_threadpool(next, events)  # raises request errors before streaming
+        return StreamingResponse(
+            _sse(itertools.chain([first], events)), media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )
+
+    @app.post("/api/flashcards/{card_id}/review")
+    def review_flashcard(card_id: str, body: FlashcardReview) -> dict[str, Any]:
+        return svc().flashcards.review(card_id, body.result)
 
     # --- Frontend ------------------------------------------------------------
 

@@ -74,6 +74,8 @@ class ExtractiveLLM:
         system = messages[0]["content"] if messages else ""
         user = messages[-1]["content"] if messages else ""
         if json_schema is not None:
+            if "cards" in json_schema.get("properties", {}):
+                return self._flashcards(messages)
             return self._quiz(messages, json_schema)
         if system.startswith("Rewrite the student's latest message"):
             m = re.search(r"Latest message: (.*)$", user, re.S)
@@ -113,6 +115,27 @@ class ExtractiveLLM:
             claim = sentence.rstrip(".")
             lines.append(f"{claim} [Source: {pdf}, p. {page}].")
         return "Based on your notes:\n\n" + "\n\n".join(lines)
+
+    def _flashcards(self, messages) -> str:
+        user = next(m["content"] for m in messages if m["role"] == "user")
+        m = _NOTES.search(user)
+        if not m:
+            return json.dumps({"cards": []})
+        section = m.group("section")
+        cards: list[dict[str, Any]] = []
+        sentences: list[tuple[int, str]] = []
+        for sid, text, _page in parse_numbered_notes(m.group("body")):
+            if text.startswith("$$"):  # a display formula: name it and cite its line
+                n = sum(c["kind"] == "formula" for c in cards) + 1
+                cards.append({"kind": "formula", "front": f"State formula {n} of {section}.", "back": text,
+                              "evidence_ids": [sid]})
+            elif len(text.split()) >= 6 and "$" not in text and not text.startswith(("|", "-")):
+                sentences.append((sid, text))
+        for sid, text in sentences[:3]:
+            subject = " ".join(text.split()[:4]).rstrip(",.;:")
+            cards.append({"kind": "point", "front": f"What do the notes say about “{subject}”?", "back": text,
+                          "evidence_ids": [sid]})
+        return json.dumps({"cards": cards})
 
     def _quiz(self, messages, schema: dict[str, Any]) -> str:
         level = schema["properties"]["bloom_level"]["enum"][0]

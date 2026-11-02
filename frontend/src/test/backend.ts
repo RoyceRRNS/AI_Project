@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import { api } from "../api";
-import { course, doc, health, mastery } from "./fixtures";
+import { course, deckOf, doc, health, mastery } from "./fixtures";
 
 /** Spies on every API call with sensible defaults; override per test. */
 export function mockBackend(over: Partial<{ [K in keyof typeof api]: unknown }> = {}) {
@@ -19,6 +19,9 @@ export function mockBackend(over: Partial<{ [K in keyof typeof api]: unknown }> 
     answer: vi.fn(),
     chat: vi.fn(),
     quiz: vi.fn(),
+    flashcards: vi.fn().mockResolvedValue(deckOf([])),
+    generateFlashcards: vi.fn(),
+    reviewFlashcard: vi.fn(),
   };
   const mocks = { ...defaults, ...over } as Record<string, ReturnType<typeof vi.fn>>;
   for (const [key, fn] of Object.entries(mocks)) {

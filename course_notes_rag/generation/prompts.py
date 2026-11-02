@@ -175,6 +175,39 @@ def quiz_messages(
     ]
 
 
+FLASHCARD_SYSTEM = """You make study flashcards from university lecture notes. Return ONE JSON \
+object that matches the schema, with a "cards" list for this section.
+
+Make two kinds of cards:
+- kind "formula": exactly one card for each [S#] formula line listed under "Formulas to name". \
+front: a short question that asks for the formula by its name or purpose, e.g. "State the \
+soft-margin SVM objective." Use the surrounding notes to work out what it computes. Never write \
+the formula itself in the front. back: copy the formula. evidence_ids: that formula's [S#] number.
+- kind "point": up to {max_points} key definitions, conditions, theorems or results a student \
+must remember. front: a precise question. back: the answer in one or two sentences, using only \
+facts from the notes and LaTeX $...$ for math. Copy any math exactly as the notes write it, \
+keeping every sign and inequality. evidence_ids: the 1 to 3 [S#] sentences that state it.
+
+Skip trivial facts, notation-only lines and anything that is not in the notes."""
+
+
+def flashcard_messages(
+    pdf_name: str, section: str, blocks: list[Block], max_points: int, formula_ids: list[int],
+) -> list[dict[str, str]]:
+    notes = format_evidence(blocks)
+    formulas = " ".join(f"[S{i}]" for i in formula_ids) or "none in this section"
+    return [
+        {"role": "system", "content": FLASHCARD_SYSTEM.format(max_points=max_points)},
+        {
+            "role": "user",
+            "content": (
+                f"<notes pdf=\"{pdf_name}\" section=\"{section}\">\n{notes}\n</notes>\n\n"
+                f"Formulas to name: {formulas}"
+            ),
+        },
+    ]
+
+
 def quiz_feedback_message(problems: list[str]) -> dict[str, str]:
     bullet = "\n".join(f"- {p}" for p in problems)
     return {
