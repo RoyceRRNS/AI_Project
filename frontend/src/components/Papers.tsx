@@ -31,8 +31,11 @@ export function Papers({ pollMs = 1200 }: { pollMs?: number }) {
   const refresh = useCallback(async () => {
     if (!courseId) return;
     try {
-      setPapers(await papersApi.list(courseId));
+      const list = await papersApi.list(courseId);
+      setPapers(list);
       setLoaded(true);
+      // Chosen once: the view must not change under the student when a paper finishes.
+      setView((v) => v ?? (list.some((p) => p.status === "ready") ? "blueprint" : "papers"));
     } catch (e) {
       notify(`Could not load papers: ${(e as Error).message}`, "error");
     }
@@ -82,7 +85,7 @@ export function Papers({ pollMs = 1200 }: { pollMs?: number }) {
   const clearPreset = useCallback(() => setPreset(null), []);
 
   if (!course || !loaded) return null;
-  const current: View = view ?? (ready.length ? "blueprint" : "papers");
+  const current: View = view ?? "papers";
   const empty = ready.length === 0 && current !== "papers";
 
   return (

@@ -80,6 +80,9 @@ _MARKS_SUM_TAIL = re.compile(
 _BARE_TAIL = re.compile(r"\s(\d{1,2})$")
 
 _TIMES = re.compile(r"(\d{1,2})\s*[x×X*]\s*(\d{1,2}(?:\.\d)?)\s*(?:=\s*(\d{1,3}))?")
+_MARKS_CLAUSE = re.compile(
+    r"[\[(]?\s*\d{1,2}\s*[x×X*]\s*\d{1,2}(?:\.\d)?\s*(?:=\s*\d{1,3})?\s*(?:marks?)?\s*[\])]?", re.IGNORECASE
+)
 _EACH = re.compile(r"each\s+(?:question\s+)?carr(?:y|ies)\s+(\d{1,2}(?:\.\d)?)\s*marks?", re.IGNORECASE)
 _ANY = re.compile(r"\bany\s+(\w+)\b", re.IGNORECASE)
 _PART_TOTAL = re.compile(r"(\d{1,3})\s*marks?\b", re.IGNORECASE)
@@ -359,7 +362,9 @@ def apply_instruction(part: PaperPart, text: str) -> None:
     text = " ".join(text.split()).strip(" -–—:")
     if not text:
         return
-    part.instructions = f"{part.instructions} {text}".strip()
+    # "(5 x 2 = 10 Marks)" is read into the fields below; what stays is what the student must do.
+    wording = _MARKS_CLAUSE.sub(" ", text)
+    part.instructions = " ".join(f"{part.instructions} {wording}".split())
     times = _TIMES.search(text)
     if times:
         part.each_marks = float(times.group(2))

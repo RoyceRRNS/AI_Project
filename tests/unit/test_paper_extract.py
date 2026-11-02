@@ -96,7 +96,8 @@ def test_parts_numbers_and_marks():
     assert labels(extracted) == ["1", "2", "3"]
     assert [q.part for q in extracted.questions] == ["A", "A", "B"]
     assert [q.marks for q in extracted.questions] == [2, 2, 8]
-    assert extracted.parts[0].instructions.endswith("Answer ALL questions")
+    assert extracted.parts[0].instructions == "Answer ALL questions"
+    assert (extracted.parts[0].each_marks, extracted.parts[0].stated_total) == (2, 4)
     assert extracted.warnings == []
 
 
