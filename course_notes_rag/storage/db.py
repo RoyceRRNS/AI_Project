@@ -618,7 +618,22 @@ def _child_row(row: sqlite3.Row) -> ChildChunk:
 def _flashcard_row(row: sqlite3.Row) -> dict[str, Any]:
     data = dict(row)
     data["bboxes"] = json.loads(data["bboxes"])
+    data["formula_bbox"] = _formula_bbox(data["kind"], data["bboxes"])
     return data
+
+
+MIN_FORMULA_BOX_POINTS = 6.0
+
+
+def _formula_bbox(kind: str, bboxes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Where a formula card's formula is: its last box, after the lead-in sentence if any."""
+    if kind != "formula" or not bboxes:
+        return None
+    box = bboxes[-1]
+    # A box a few points across is a parser slip, and a crop of it would show nothing useful.
+    if min(box["x1"] - box["x0"], box["y1"] - box["y0"]) < MIN_FORMULA_BOX_POINTS:
+        return None
+    return box
 
 
 def _question_row(row: sqlite3.Row) -> dict[str, Any]:

@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -27,6 +27,7 @@ from course_notes_rag.generation.chat_engine import ChatRequestError
 from course_notes_rag.generation.flashcards import FlashcardRequestError
 from course_notes_rag.generation.quiz_engine import QuizRequest, QuizRequestError
 from course_notes_rag.ingestion.pipeline import UploadError
+from course_notes_rag.ingestion.regions import RegionError, render_region
 from course_notes_rag.services import Services, build_services
 from course_notes_rag.storage.db import NotFoundError
 
@@ -190,6 +191,19 @@ def create_app(services: Services | None = None, settings: Settings | None = Non
             raise HTTPException(404, "The PDF file is missing from storage")
         return FileResponse(path, media_type="application/pdf", filename=doc["pdf_name"],
                             content_disposition_type="inline")
+
+    @app.get("/api/documents/{document_id}/region")
+    def document_region(document_id: str, page: int, x0: float, y0: float, x1: float, y1: float) -> Response:
+        """One area of a page as a PNG, so a card can show a formula exactly as the PDF has it."""
+        doc = svc().db.get_document(document_id)
+        path = Path(doc["file_path"])
+        if not path.exists():
+            raise HTTPException(404, "The PDF file is missing from storage")
+        try:
+            png = render_region(path, page, x0, y0, x1, y1)
+        except RegionError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return Response(png, media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
 
     @app.get("/api/documents/{document_id}/markdown")
     def document_markdown(document_id: str) -> dict[str, Any]:

@@ -38,11 +38,38 @@ describe("Markdown", () => {
     render(<Markdown text="[site](https://example.com)" />);
     expect(screen.getByRole("link", { name: "site" })).toHaveAttribute("target", "_blank");
   });
+
+  it("renders a parsed formula with rows but no environment instead of showing its source", () => {
+    const { container } = render(<Markdown text={"$$\nk x w + ( b - & low ) \\\\ = k x 4\n$$"} />);
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  it("shows a note instead of red source code for a formula that cannot be rendered", () => {
+    const { container } = render(<Markdown text={"Address:\n\n$$\n\\begin{array} {\n$$\n\nNext [Source: Notes.pdf, p. 3]."} />);
+    expect(container.querySelector(".katex-error")).toBeNull();
+    const note = screen.getByText(/couldn't be read from the PDF/);
+    expect(note.closest(".formula-unreadable")).toHaveClass("display");
+    expect(note.closest(".formula-unreadable")).toHaveAttribute("title", "What the parser read: \\begin{array} {");
+    expect(screen.getByRole("button", { name: /Notes, page 3/ })).toBeInTheDocument();
+  });
+
+  it("lets the caller choose what stands in for an unreadable formula", () => {
+    render(<Markdown text={"$$\n\\frac{1}{\n$$"} renderUnreadable={(latex) => <em>scan of {latex}</em>} />);
+    expect(screen.getByText("scan of \\frac{1}{")).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't be read/)).toBeNull();
+  });
 });
 
 describe("MathText", () => {
   it("renders short math strings inline", () => {
     const { container } = render(<MathText text="Compute $\\nabla f$" />);
     expect(container.querySelector(".math-text .katex")).not.toBeNull();
+  });
+
+  it("shows an inline note for a formula that cannot be rendered", () => {
+    const { container } = render(<MathText text={"“The address is $\\frac{1}{$.”"} />);
+    expect(container.querySelector(".katex-error")).toBeNull();
+    expect(screen.getByText(/couldn't be read from the PDF/).closest(".formula-unreadable")).not.toHaveClass("display");
   });
 });

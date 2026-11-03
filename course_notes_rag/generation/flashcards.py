@@ -202,7 +202,13 @@ def _formula_card(unit: EvidenceUnit, units: list[EvidenceUnit], name: str | Non
     # The quote is the lead-in sentence plus the formula; the viewer opens on the formula's page.
     evidence, _ = resolve_evidence([context.id, unit.id] if context else [unit.id], parent.blocks, min_words=0)
     quote = evidence.quote if evidence else unit.block.text
-    boxes = [b for b in (evidence.bboxes if evidence else []) if b.page == unit.page]
+    # The formula's own box goes last: the card shows that area of the page as the PDF has it.
+    # Without one, a lead-in box would be mistaken for the formula, so the card keeps none.
+    formula_box = unit.block.bbox
+    boxes = [] if formula_box is None else [
+        *(b for b in (evidence.bboxes if evidence else []) if b.page == unit.page and b != formula_box),
+        formula_box,
+    ]
     return NewCard("formula", name, unit.block.to_markdown(), quote, unit.page,
                    [b.to_dict() for b in boxes], unit.id)
 

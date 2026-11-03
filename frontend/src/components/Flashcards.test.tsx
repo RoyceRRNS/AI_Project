@@ -234,6 +234,70 @@ describe("Flashcards study session", () => {
     expect(card).not.toHaveClass("flipped");
   });
 
+  it("shows a formula both as text and cropped from the notes", async () => {
+    const box = { page: 2, x0: 80, y0: 100, x1: 400, y1: 130 };
+    await start([flashcard({ formula_bbox: box })]);
+    flip();
+    const back = screen.getByTestId("card-back");
+    expect(back.querySelector(".katex")).not.toBeNull();
+    const img = within(back).getByRole("img", { name: "The formula on page 2 of Lecture 04 SVMs" });
+    expect(img).toHaveAttribute("src", "/api/documents/d1/region?page=2&x0=80&y0=100&x1=400&y1=130");
+    expect(within(back).getByText("As written in your notes")).toBeInTheDocument();
+  });
+
+  it("shows only the crop for a formula that cannot be rendered, and a note if that fails too", async () => {
+    const box = { page: 3, x0: 118, y0: 357, x1: 324, y1: 431 };
+    await start([flashcard({ back: "$$\n\\begin{array} {\n$$", formula_bbox: box })]);
+    flip();
+    const back = screen.getByTestId("card-back");
+    expect(back.querySelector(".katex, .katex-error")).toBeNull();
+    expect(within(back).getByText(/this formula couldn't be converted to text/)).toBeInTheDocument();
+    fireEvent.error(within(back).getByRole("img"));
+    expect(within(back).queryByRole("img")).toBeNull();
+    const note = within(back).getByText(/couldn't be read from the PDF/);
+    expect(note.closest(".formula-unreadable")).toHaveAttribute("title", "What the parser read: \\begin{array} {");
+  });
+
+  it("does not crop the page for key points or formulas without a box", async () => {
+    await start([FORMULA, POINT]);
+    flip();
+    expect(within(screen.getByTestId("card-back")).queryByRole("img")).toBeNull();
+  });
+
+  it("says the text version may be misread when the formula needed repair", async () => {
+    const box = { page: 3, x0: 118, y0: 357, x1: 324, y1: 431 };
+    await start([flashcard({ back: "$$\nk x w + ( b - & low ) \\\\ = k x 4\n$$", formula_bbox: box })]);
+    flip();
+    const back = screen.getByTestId("card-back");
+    expect(back.querySelector(".katex-display")).not.toBeNull();
+    expect(within(back).getByText("As written in your notes: the text version may be misread")).toBeInTheDocument();
+  });
+
+  it("shows the notes' version in the card browser only when the text version is in doubt", async () => {
+    const box = { page: 2, x0: 80, y0: 100, x1: 400, y1: 130 };
+    open([
+      flashcard({ id: "ok", formula_bbox: box }),
+      flashcard({ id: "repaired", back: "$$\na & = b \\\\ c & = d\n$$", formula_bbox: box }),
+      flashcard({ id: "prose", back: "$$\nThe three address code for this expression\n$$", formula_bbox: box }),
+      flashcard({ id: "bad", back: "$$\n\\frac{1}{\n$$", formula_bbox: box }),
+      flashcard({ id: "bad-no-box", back: "$$\n\\frac{1}{\n$$" }),
+    ]);
+    fireEvent.click(await screen.findByRole("button", { name: "Browse 5 cards" }));
+    const [ok, repaired, prose, bad, badNoBox] = screen.getAllByTestId("card-tile");
+    expect(ok.querySelector(".katex")).not.toBeNull();
+    expect(within(ok).queryByRole("img")).toBeNull();
+    for (const tile of [repaired, prose, bad]) {
+      expect(within(tile).getByRole("img")).toBeInTheDocument();
+      expect(tile.querySelector(".katex")).toBeNull();
+    }
+    expect(within(badNoBox).queryByRole("img")).toBeNull();
+    expect(within(badNoBox).getByText(/couldn't be read from the PDF/)).toBeInTheDocument();
+
+    // A crop that fails to load falls back to the text version.
+    fireEvent.error(within(repaired).getByRole("img"));
+    expect(repaired.querySelector(".katex-display")).not.toBeNull();
+  });
+
   it("grades cards, brings forgotten ones back and summarises the session", async () => {
     const mocks = await start([FORMULA, POINT]);
     flip();

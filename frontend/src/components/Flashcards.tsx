@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BookMarked, CheckCircle2, LayoutGrid, Layers, Loader2, Play, RefreshCw, RotateCcw, Sparkles, X,
 } from "lucide-react";
 import { api, type CardKind, type Flashcard, type FlashcardDeck, type ReviewResult } from "../api";
 import { prettyPdfName } from "../citations";
 import { isTyping } from "../dom";
+import { mathQuality, type MathQuality } from "../math";
 import { useStore } from "../store";
-import { Markdown, MathText } from "./Markdown";
+import { Markdown, MathText, UnreadableFormula } from "./Markdown";
 
 type Filter = "all" | CardKind;
 
@@ -324,6 +325,49 @@ function SourceLink({ card }: { card: Flashcard }) {
   );
 }
 
+const CROP_CAPTION: Record<MathQuality, string> = {
+  clean: "As written in your notes",
+  doubtful: "As written in your notes: the text version may be misread",
+  unreadable: "From your notes: this formula couldn't be converted to text",
+};
+
+/** The formula cropped from the PDF page, which is right even when the parser misread it. */
+function FormulaFromNotes({ card, quality, fallback }: { card: Flashcard; quality: MathQuality; fallback: ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  const box = card.formula_bbox;
+  if (!box || failed) return <>{fallback}</>;
+  return (
+    <figure className="fc-figure">
+      <img
+        src={api.documentRegionUrl(card.document_id, box)}
+        alt={`The formula on page ${box.page} of ${prettyPdfName(card.pdf_name)}`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+      <figcaption className="muted small">{CROP_CAPTION[quality]}</figcaption>
+    </figure>
+  );
+}
+
+/**
+ * A formula card's answer. Studying shows the formula as text and as the notes have it; the
+ * card browser shows the notes' version only when the text version is in doubt.
+ */
+function FormulaAnswer({ card, compact = false }: { card: Flashcard; compact?: boolean }) {
+  const quality = useMemo(() => mathQuality(card.back), [card.back]);
+  const text = quality === "unreadable"
+    ? <UnreadableFormula latex={card.back.replace(/^\s*\$\$|\$\$\s*$/g, "").trim()} display />
+    : <Markdown text={card.back} />;
+  if (compact && quality === "clean") return text;
+  if (compact) return <FormulaFromNotes key={card.id} card={card} quality={quality} fallback={text} />;
+  return (
+    <>
+      {quality !== "unreadable" && text}
+      <FormulaFromNotes key={card.id} card={card} quality={quality} fallback={quality === "unreadable" ? text : null} />
+    </>
+  );
+}
+
 function CardTile({ card }: { card: Flashcard }) {
   return (
     <article className="fc-tile" data-testid="card-tile">
@@ -333,7 +377,9 @@ function CardTile({ card }: { card: Flashcard }) {
         {card.due && <span className="badge warn">Due</span>}
       </div>
       <div className="fc-tile-front"><MathText text={card.front} /></div>
-      <div className="fc-tile-back"><Markdown text={card.back} /></div>
+      <div className="fc-tile-back">
+        {card.kind === "formula" ? <FormulaAnswer card={card} compact /> : <Markdown text={card.back} />}
+      </div>
       <div className="fc-tile-foot">
         <span className="muted small">{card.section_title}</span>
         <SourceLink card={card} />
@@ -450,7 +496,9 @@ export function StudySession({
               <span className={`badge kind-${card.kind}`}>{KIND_LABEL[card.kind]}</span>
               <span className="muted small">Answer</span>
             </div>
-            <div className="fc-answer"><Markdown text={card.back} /></div>
+            <div className="fc-answer">
+              {card.kind === "formula" ? <FormulaAnswer card={card} /> : <Markdown text={card.back} />}
+            </div>
           </div>
         </div>
       </div>

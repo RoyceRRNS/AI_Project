@@ -110,6 +110,11 @@ The Flashcards tab builds a deck from a course's notes (`generation/flashcards.p
 
 Cards are only as accurate as the parse: a misread formula or a shifted table reaches the card unchanged, and these checks compare words and symbols, not meaning. Every card links to its source page, so check anything that looks wrong against the PDF.
 
+Formula cards also show the formula cropped from the PDF page (`GET /api/documents/{id}/region`), so a misread is easy to spot. Scans and handwriting are where Docling misreads most:
+
+- **Repairable:** the UI repairs the usual slips before KaTeX renders them, such as rows (`\\`) and alignment points (`&`) with no environment around them, or a word read as a macro. Those cards are marked as possibly misread, and the card browser shows the crop for them.
+- **Unreadable:** a formula that still cannot be rendered is never shown as red source code. Flashcards show the crop instead; chat, quizzes and the library show a short note.
+
 Endpoints: `GET /api/courses/{id}/flashcards`, `POST /api/courses/{id}/flashcards` (SSE), `POST /api/flashcards/{id}/review`.
 
 ## Acceptance criteria → implementation → tests

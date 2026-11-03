@@ -8,7 +8,7 @@ from course_notes_rag.generation.flashcards import (
 )
 from course_notes_rag.generation.llm import FakeLLM, LLMError, LLMUnavailableError
 from course_notes_rag.models import BBox, Block, ParentChunk
-from course_notes_rag.storage.db import NotFoundError
+from course_notes_rag.storage.db import NotFoundError, _formula_bbox
 from tests.conftest import SVM
 
 FORMULA = r"\min_{w, b} \frac{1}{2} \Vert w \Vert^2"
@@ -314,6 +314,27 @@ def test_cards_go_away_with_their_document(services, ready_course):
     assert any(c["document_id"] == svm_id for c in services.flashcards.deck(cid)["cards"])
     services.ingestion.delete_document(svm_id)
     assert all(c["document_id"] != svm_id for c in services.flashcards.deck(cid)["cards"])
+
+
+LEAD = {"page": 3, "x0": 75, "y0": 335, "x1": 334, "y1": 343}
+FORMULA_BOX = {"page": 3, "x0": 119, "y0": 358, "x1": 324, "y1": 431}
+
+
+@pytest.mark.parametrize("kind, boxes, expected", [
+    ("formula", [LEAD, FORMULA_BOX], FORMULA_BOX),  # the lead-in sentence comes first
+    ("formula", [FORMULA_BOX], FORMULA_BOX),
+    ("formula", [LEAD, FORMULA_BOX | {"y1": 360}], None),  # 2 points high: a parser slip
+    ("formula", [], None),
+    ("point", [FORMULA_BOX], None),
+])
+def test_a_formula_card_points_at_its_formula_on_the_page(kind, boxes, expected):
+    assert _formula_bbox(kind, boxes) == expected
+
+
+def test_a_formula_without_a_box_has_no_boxes_so_its_lead_in_is_not_shown_as_the_formula():
+    blocks = [BLOCKS[1], Block("formula", FORMULA, 1, None)]
+    (cards, _), _ = section_cards(reply(), blocks=blocks)
+    assert cards[0].kind == "formula" and cards[0].bboxes == []
 
 
 def test_add_flashcards_with_no_cards_stores_nothing(services, ready_course):

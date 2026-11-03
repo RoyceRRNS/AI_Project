@@ -1,6 +1,7 @@
 """Endpoint-level positive and negative cases."""
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -254,6 +255,12 @@ def test_flashcards_generate_list_and_review(client, services, course, sample_pd
     card = next(c for c in deck["cards"] if c["kind"] == "formula")
     assert card["back"].startswith("$$") and card["pdf_name"] == SVM and card["section_title"]
     assert card["bboxes"] and card["document_id"] == doc["id"]
+    assert card["formula_bbox"] == card["bboxes"][-1]
+    assert all(c["formula_bbox"] is None for c in deck["cards"] if c["kind"] == "point")
+    box = card["formula_bbox"]
+    image = client.get(f"/api/documents/{doc['id']}/region", params=box)
+    assert image.status_code == 200 and image.headers["content-type"] == "image/png"
+    assert image.content.startswith(b"\x89PNG")
 
     good = client.post(f"/api/flashcards/{card['id']}/review", json={"result": "good"})
     assert good.status_code == 200 and good.json()["box"] == 2 and good.json()["due"] is False
@@ -267,6 +274,21 @@ def test_flashcards_generate_list_and_review(client, services, course, sample_pd
     assert rebuilt[-1][1]["created"] == len(streamed)
     fresh = client.get(f"/api/courses/{course['id']}/flashcards").json()["cards"]
     assert all(c["reviews"] == 0 for c in fresh)
+
+
+def test_document_region_errors(client, services, course, sample_pdfs):
+    doc = upload(client, course["id"], SVM, sample_pdfs[SVM].read_bytes()).json()["documents"][0]
+    wait_ready(services, doc["id"])
+    url = f"/api/documents/{doc['id']}/region"
+    box = {"page": 1, "x0": 50, "y0": 60, "x1": 300, "y1": 120}
+    assert client.get(url, params=box).status_code == 200
+    assert client.get(url, params=box | {"page": 99}).status_code == 400
+    assert client.get(url, params=box | {"x1": 10}).status_code == 400
+    assert client.get(url, params=box | {"x0": "left"}).status_code == 422
+    assert client.get(url, params={"page": 1}).status_code == 422
+    assert client.get("/api/documents/missing/region", params=box).status_code == 404
+    Path(services.db.get_document(doc["id"])["file_path"]).unlink()
+    assert client.get(url, params=box).status_code == 404
 
 
 def test_flashcard_errors(client, course):

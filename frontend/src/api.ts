@@ -177,6 +177,8 @@ export interface Flashcard {
   source_quote: string;
   source_page: number;
   bboxes: BBox[];
+  /** Where a formula card's formula is on the page, for showing it exactly as the PDF has it. */
+  formula_bbox: BBox | null;
   pdf_name: string;
   section_title: string;
   lecture_title: string;
@@ -236,6 +238,9 @@ export const api = {
   documentMarkdown: (id: string) =>
     request<{ document_id: string; pdf_name: string; engine: string; markdown: string }>(`/documents/${id}/markdown`),
   documentFileUrl: (id: string) => `${BASE}/documents/${id}/file`,
+  /** A PNG of one area of a page, e.g. a formula as the PDF shows it. */
+  documentRegionUrl: (id: string, b: BBox) =>
+    `${BASE}/documents/${id}/region?page=${b.page}&x0=${b.x0}&y0=${b.y0}&x1=${b.x1}&y1=${b.y1}`,
   mastery: (courseId: string) => request<MasterySummary>(`/courses/${courseId}/mastery`),
   answer: (quizId: string, questionId: number, label: string) =>
     request<AnswerResult>(`/quizzes/${quizId}/questions/${questionId}/answer`, json({ label })),

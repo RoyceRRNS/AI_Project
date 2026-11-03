@@ -168,6 +168,11 @@ test("flashcards: make a deck, flip by keyboard, grade cards and open the source
   await expect(page.getByTestId("flashcard")).toHaveClass(/flipped/);
   await expect(page.getByTestId("card-back").locator(".katex").first()).toBeVisible();
 
+  // The formula is also cropped from the PDF page, so a misread can be checked at a glance.
+  const crop = page.getByTestId("card-back").getByRole("img", { name: /The formula on page \d+/ });
+  await expect(crop).toBeVisible();
+  await expect.poll(() => crop.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(50);
+
   // The source link opens the highlighted page.
   await page.locator(".fc-after").getByRole("button", { name: /· p\. \d+/ }).click();
   const viewer = page.getByRole("complementary", { name: "PDF viewer" });

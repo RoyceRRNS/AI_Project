@@ -65,7 +65,7 @@ export const flashcard = (over: Partial<Flashcard> = {}): Flashcard => ({
   id: "f1", course_id: "c1", parent_id: "p1", document_id: "d1", kind: "formula",
   front: "State the geometric margin.", back: "$$\n\\gamma = 1 / \\Vert w \\Vert\n$$",
   source_quote: "The margin is the distance from a point to the boundary.", source_page: 2,
-  bboxes: [{ page: 2, x0: 1, y0: 2, x1: 3, y1: 4 }], pdf_name: "Lecture_04_SVMs.pdf",
+  bboxes: [{ page: 2, x0: 1, y0: 2, x1: 3, y1: 4 }], formula_bbox: null, pdf_name: "Lecture_04_SVMs.pdf",
   section_title: "3 Optimal Margin", lecture_title: "Lecture 4", box: 1, reviews: 0, lapses: 0,
   due_at: null, last_reviewed_at: null, due: true, ...over,
 });
