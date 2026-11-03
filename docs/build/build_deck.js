@@ -148,21 +148,23 @@ const shot = (slide, file, x, y, w, crop) => {
   s.addNotes("Three gaps: answers aren't grounded in the course material, lecture PDFs are hard to parse, and studying is passive. The research quote motivates the quiz half of the project: retrieval practice is one of the most effective study techniques.");
 
   // =============================== 3. What we built ===============================
-  s = content("WHAT WE BUILT", "One workspace: library, chat and adaptive quiz", "Introduction");
+  s = content("WHAT WE BUILT", "One workspace for notes, answers and practice", "Introduction");
   const features = [
-    ["LuFileText", HEX.accent1, "Library", "Upload lecture PDFs, Beamer slides or scans. Watch them parse, then preview the extracted Markdown with rendered math."],
-    ["LuMessagesSquare", HEX.accent2, "Grounded chat", "Answers stream in with clickable page citations. A click opens the PDF with the supporting paragraph highlighted."],
-    ["LuBrain", HEX.accent5, "Adaptive quiz", "Bloom-calibrated multiple-choice questions with a rationale for every option and a mastery score per section."],
+    ["LuFileText", HEX.accent1, "Library", "Upload lecture PDFs, slides or scans; preview the parsed text and math."],
+    ["LuMessagesSquare", HEX.accent2, "Grounded chat", "Answers cite pages; a click opens the PDF at the highlighted paragraph."],
+    ["LuLayers", HEX.accent3, "Flashcards", "Every formula and key point, reviewed on a spaced schedule."],
+    ["LuBrain", HEX.accent5, "Adaptive quiz", "Bloom-calibrated questions aimed at the sections you know least."],
+    ["LuFileStack", HEX.accent6, "Past papers", "Exam blueprint, revision plan and mock papers from previous papers."],
   ];
   for (const [i, [ic, col, head, body]] of features.entries()) {
-    const y = 1.4 + i * 1.22;
-    await iconDot(s, ic, 0.5, y, 0.5, col);
-    text(s, head, { x: 1.15, y: y - 0.02, w: 3.0, h: 0.3, fontSize: 16, bold: true });
-    text(s, body, { x: 1.15, y: y + 0.3, w: 3.0, h: 0.85, fontSize: 12, color: C.text2 });
+    const y = 1.35 + i * 0.72;
+    await iconDot(s, ic, 0.5, y, 0.44, col);
+    text(s, head, { x: 1.1, y: y - 0.03, w: 3.05, h: 0.27, fontSize: 14, bold: true });
+    text(s, body, { x: 1.1, y: y + 0.24, w: 3.05, h: 0.42, fontSize: 11, color: C.text2 });
   }
   shot(s, "ui_chat_viewer.png", 4.4, 1.4, 5.1);
   text(s, "Runs fully offline on one laptop: RTX 4070 (8 GB), Qwen 2.5 7B through Ollama.", { x: 4.4, y: 4.67, w: 5.1, h: 0.3, fontSize: 11, color: C.text2, italic: true });
-  s.addNotes("Live demo starts here. Show the three tabs. The screenshot is a real answer from Qwen 2.5 7B: green chips are verified citations, dashed 'auto' chips were added by the grounding check, and the viewer on the right highlights the paragraph the citation points to.");
+  s.addNotes("Live demo starts here. Show the five tabs. The screenshot is a real answer from Qwen 2.5 7B: green chips are verified citations, dashed 'auto' chips were added by the grounding check, and the viewer on the right highlights the paragraph the citation points to.");
 
   // =============================== 4. How it works ===============================
   pres.addSection({ title: "System" });
@@ -292,6 +294,75 @@ const shot = (slide, file, x, y, w, crop) => {
   text(s, "A section at 10% mastery is picked about 40× more often than one at 90%.", { x: 4.9, y: 4.7, w: 4.6, h: 0.3, fontSize: 11, italic: true, color: C.text2 });
   s.addNotes("The student model is one number per parent section. A correct first try pulls it toward 1, a wrong one toward 0. Sampling with a squared weight strongly favours weak sections without ever starving the others.");
 
+  // =============================== Flashcards ===============================
+  s = content("FLASHCARDS", "Formulas and key points, reviewed on a schedule", "Features");
+  const fc = [
+    ["LuSigma", "Formula cards", "Every display formula becomes a card. The back is the LaTeX from the PDF, copied verbatim; Qwen only writes the question."],
+    ["LuListChecks", "Key-point cards", "Up to 6 per section, each citing [S#] note sentences. Dropped unless those hold 25% of its terms and every symbol and number."],
+    ["LuRepeat", "Spaced review", "“Got it” moves a card up a box; “Again” sends it back to box 1 and repeats it later in the same session."],
+  ];
+  for (const [i, [ic, head, body]] of fc.entries()) {
+    const y = 1.4 + i * 1.15;
+    await iconDot(s, ic, 0.5, y, 0.45, HEX.accent3);
+    text(s, head, { x: 1.1, y: y - 0.02, w: 3.4, h: 0.27, fontSize: 14, bold: true });
+    text(s, body, { x: 1.1, y: y + 0.26, w: 3.4, h: 0.8, fontSize: 11, color: C.text2 });
+  }
+  s.addChart(pres.charts.BAR, [{ name: "Days until next review", labels: ["Box 1", "Box 2", "Box 3", "Box 4", "Box 5"], values: [0, 1, 3, 7, 14] }], {
+    x: 4.9, y: 1.35, w: 4.6, h: 3.1, barDir: "col", chartColors: [HEX.accent3],
+    showTitle: true, title: "Days until the next review, by Leitner box", titleFontSize: 12, titleColor: HEX.dk1, titleFontFace: "+mn-lt",
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFontSize: 11, dataLabelColor: HEX.dk1, dataLabelFormatCode: "0", dataLabelFontFace: "+mn-lt",
+    catAxisLabelColor: HEX.dk2, valAxisLabelColor: HEX.dk2, catAxisLabelFontSize: 11, valAxisLabelFontSize: 10, catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt",
+    valGridLine: { color: "E2E8F0", size: 0.75 }, catGridLine: { style: "none" }, showLegend: false, valAxisHidden: true,
+  });
+  text(s, "Box 1 is due again at once. Cards leave with their document, and reviews never change quiz mastery.", { x: 4.9, y: 4.55, w: 4.6, h: 0.45, fontSize: 11, italic: true, color: C.text2 });
+  s.addNotes("Make a deck from the sample course, then study it with the keyboard: Space flips, 1 is Again, 2 is Got it. Formula cards keep the notes' own LaTeX, so the model cannot change a formula; it only names it. Key points must be supported by the cited sentences, including every symbol and number, which caught a flipped inequality and an invented formula during testing.");
+
+  // =============================== Misread formulas ===============================
+  s = content("READING MISREAD FORMULAS", "A misread formula shows the page, not red code", "Features");
+  card(s, 0.5, 1.4, 4.25, 1.95, { fill: C.text1, line: C.text1, name: "before" });
+  text(s, "BEFORE: WHAT DOCLING READ FROM A SCAN", { x: 0.7, y: 1.55, w: 3.9, h: 0.22, fontSize: 9, bold: true, color: C.accent2, charSpacing: 2 });
+  text(s, String.raw`\ k x w + ( b a s e _ { c } ^ { u } - & \text {low } 1 \times w ) \cdot \\ = \ k x 4 + ( b a s e _ { c } - 1 \times 4 ) \\ C [ k ] \ = \ 4 \ k + c _ { 3 }`, { x: 0.7, y: 1.85, w: 3.85, h: 0.95, fontSize: 10, fontFace: "Courier New", color: "F87171" });
+  text(s, "KaTeX rejected the stray &, so the card showed all of this as red source code.", { x: 0.7, y: 2.85, w: 3.85, h: 0.4, fontSize: 10.5, color: C.background2 });
+  s.addImage({ data: await icon("LuArrowRight", HEX.dk2), x: 4.88, y: 2.2, w: 0.3, h: 0.3 });
+  card(s, 5.3, 1.4, 4.2, 1.95, { fill: C.background1, line: "CBD5E1", name: "after" });
+  text(s, "AFTER: THE CARD SHOWS THE PAGE", { x: 5.5, y: 1.55, w: 3.8, h: 0.22, fontSize: 9, bold: true, color: C.accent6, charSpacing: 2 });
+  s.addImage({ path: FIG("formula_crop.png"), x: 6.05, y: 1.85, w: 2.7, h: 2.7 / (890 / 339), altText: "The formula cropped from page 3 of the notes" });
+  text(s, "As written in your notes: the text version may be misread", { x: 5.5, y: 2.95, w: 3.8, h: 0.3, fontSize: 10.5, italic: true, color: C.text2, align: "center" });
+  const fix = [
+    ["LuWrench", "Repair", "Rows (\\\\) and alignment points (&) with no environment are wrapped in aligned; a word read as a macro becomes text."],
+    ["LuFlag", "Flag", "A formula that needed repair, or reads as a sentence, is marked “may be misread” and shown from the page."],
+    ["LuImage", "Fall back", "A formula cut off part-way is never shown as code: cards show the crop, chat and quizzes a short note."],
+  ];
+  for (const [i, [ic, head, body]] of fix.entries()) {
+    const x = 0.5 + i * 3.05;
+    await iconDot(s, ic, x, 3.55, 0.4, HEX.accent1);
+    text(s, head, { x: x + 0.52, y: 3.6, w: 2.3, h: 0.3, fontSize: 13, bold: true });
+    text(s, body, { x, y: 4.05, w: 2.85, h: 0.75, fontSize: 10.5, color: C.text2 });
+  }
+  text(s, "On a real course's scanned compiler notes, 7 of 27 formulas failed in KaTeX: 5 are now repaired and 2 are shown from the page.", { x: 0.5, y: 4.85, w: 9, h: 0.25, fontSize: 10.5, italic: true, color: C.text2 });
+  s.addNotes("Scans and handwriting are where formula recognition fails. Before this fix, one stray ampersand made KaTeX reject the whole formula and the card showed raw LaTeX in red. Now the app repairs the common slips, flags formulas that are probably misread, and every formula card shows the formula cropped from the PDF page through a small region endpoint, so the student always sees the original. The repairs make a formula display; they cannot recover what was misread, which is why the crop is there.");
+
+  // =============================== Past papers ===============================
+  s = content("PAST PAPERS", "Previous papers show how the exam is set", "Features");
+  const pp = [
+    ["LuScanText", "Read", "Numbered text, question tables or scans: parts, marks, sub-questions and OR choices."],
+    ["LuTags", "Classify", "One of 7 question types and a Bloom level; a level printed on the paper wins."],
+    ["LuMap", "Map", "Each question is matched to its section of the notes, or reported as a gap."],
+    ["LuCalendarCheck", "Plan & practise", "Topic weightage, a day-by-day revision plan, and mock papers in the same pattern."],
+  ];
+  for (const [i, [ic, head, body]] of pp.entries()) {
+    const x = 0.5 + i * 2.3;
+    card(s, x, 1.4, 2.1, 1.95, { fill: C.background2 });
+    await iconDot(s, ic, x + 0.18, 1.58, 0.44, HEX.accent6);
+    text(s, head, { x: x + 0.18, y: 2.12, w: 1.8, h: 0.28, fontSize: 14, bold: true });
+    text(s, body, { x: x + 0.18, y: 2.45, w: 1.8, h: 0.85, fontSize: 11, color: C.text2 });
+  }
+  card(s, 0.5, 3.6, 9, 1.4, { fill: C.text1, line: C.text1 });
+  text(s, "REVISION PRIORITY", { x: 0.75, y: 3.75, w: 4.3, h: 0.22, fontSize: 9, bold: true, color: C.accent2, charSpacing: 2 });
+  text(s, "priority = expected marks × (0.5 + 0.5 × frequency) × (1.5 − mastery)", { x: 0.75, y: 4.0, w: 8.5, h: 0.38, fontSize: 15, fontFace: "Cambria", italic: true, color: C.background1 });
+  text(s, "Mock solutions are checked for grounding and arithmetic, not for reasoning, so the app says “Arithmetic rechecked”, never “correct”. Treat them as drafts.", { x: 0.75, y: 4.42, w: 8.5, h: 0.5, fontSize: 11, color: C.background2 });
+  s.addNotes("Load the sample papers in the Papers tab. The blueprint shows which topics carry the marks and how often they come up; the revision plan ranks sections by expected marks, frequency and the student's quiz mastery. Mock papers copy the template paper's parts, marks and either-or choices, with worked solutions citing the notes. Be candid that validation checks grounding and arithmetic, not whether the reasoning is right.");
+
   // =============================== 10. Results: retrieval ===============================
   pres.addSection({ title: "Evaluation" });
   s = content("RESULTS", "Right lecture section found for 10 of 10 questions", "Evaluation");
@@ -344,7 +415,7 @@ const shot = (slide, file, x, y, w, crop) => {
     text(s, l, { x: 7.5, y: y + 0.08, w: 1.9, h: 0.45, fontSize: 10.5, color: C.background2 });
   }
   text(s, "Positive and negative cases for every component: invalid, empty, encrypted and duplicate PDFs, off-topic questions, malformed model output.", { x: 6.4, y: 4.45, w: 3.1, h: 0.6, fontSize: 10, italic: true, color: C.text2 });
-  s.addNotes("The three fixes that mattered most, measured on the real stack. On the right, the test suites: unit and end-to-end tests run offline in about a minute; the live suite exercises Docling, BGE-M3, the reranker and Qwen together.");
+  s.addNotes("The three fixes that mattered most, measured on the real stack. On the right, the test suites: unit and end-to-end tests run offline in a few minutes; the live suite exercises Docling, BGE-M3, the reranker and Qwen together.");
 
   // =============================== 12-14. Syllabus ===============================
   pres.addSection({ title: "Syllabus" });
@@ -362,6 +433,65 @@ const shot = (slide, file, x, y, w, crop) => {
     });
     return sl;
   };
+  // PEAS and the task environment (Module 1)
+  s = content("M1 INTELLIGENT AGENTS · PEAS", "A tutoring agent, described by PEAS", "Syllabus");
+  const peas = [
+    ["P", HEX.accent1, "Performance measure", [
+      "Right section found (Hit@1 and MRR 1.0)",
+      "Verified citations; “Not found”, not a guess",
+      "Valid quiz questions; mastery rising",
+    ]],
+    ["E", HEX.accent2, "Environment", [
+      "Course PDFs: notes, slides, scans, past papers",
+      "The student, through the browser",
+      "The laptop: GPU, Ollama, local storage",
+    ]],
+    ["A", HEX.accent5, "Actuators", [
+      "Cited answers; the PDF opened at the paragraph",
+      "Quiz questions, flashcards, mock papers",
+      "Feedback, mastery bars, a revision plan",
+    ]],
+    ["S", HEX.accent3, "Sensors", [
+      "PDFs parsed into blocks with page and box",
+      "Questions, chat history, quiz settings",
+      "Options picked; “Again” or “Got it” on cards",
+    ]],
+  ];
+  for (const [i, [letter, col, head, items]] of peas.entries()) {
+    const x = 0.5 + (i % 2) * 4.6, y = 1.35 + Math.floor(i / 2) * 1.85;
+    card(s, x, y, 4.4, 1.7, { fill: C.background2 });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: x + 0.2, y: y + 0.18, w: 0.48, h: 0.48, rectRadius: 0.06, fill: { color: col }, line: { color: col } });
+    text(s, letter, { x: x + 0.2, y: y + 0.18, w: 0.48, h: 0.48, fontSize: 20, bold: true, fontFace: "Cambria", color: C.background1, align: "center", valign: "middle" });
+    text(s, head, { x: x + 0.82, y: y + 0.18, w: 3.4, h: 0.48, fontSize: 14, bold: true, valign: "middle" });
+    text(s, items.map((t, j) => ({ text: t, options: { bullet: true, breakLine: j < items.length - 1 } })), { x: x + 0.2, y: y + 0.78, w: 4.0, h: 0.85, fontSize: 11, color: C.text2, paraSpaceAfter: 2 });
+  }
+  s.addNotes("PEAS for the whole system, as an intelligent agent from Module 1. The performance measures are the ones we actually measured: retrieval accuracy, citation verification, quiz validity and mastery change. The environment is the student's own notes and the student; actuators are everything the app shows; sensors are the parsed PDFs and the student's inputs.");
+
+  s = content("M1 INTELLIGENT AGENTS · ENVIRONMENT", "What kind of environment the agent works in", "Syllabus");
+  const env = [
+    ["Observability", "Partially observable", "It sees the notes and the student's answers, never what the student actually knows; mastery estimates it"],
+    ["Agents", "Single-agent", "The student cooperates with the agent; nobody plays against it"],
+    ["Determinism", "Stochastic", "The LLM samples, quiz sections are drawn at random, and a student's answer is never certain"],
+    ["Episodes", "Sequential", "Chat is mostly episodic, but each quiz answer and card review changes what comes next"],
+    ["Change", "Static per request", "Notes don't change mid-answer; uploads and the student's learning change them between requests"],
+    ["State space", "Discrete", "Tokens, pages and options A–D are discrete; the mastery belief is continuous, in [0, 1]"],
+    ["Rules", "Known", "Grading, the mastery update and the citation rules are fixed; only the notes are new"],
+  ];
+  for (const [i, [prop, value, why]] of env.entries()) {
+    const y = 1.35 + i * 0.44;
+    if (i % 2 === 0) card(s, 0.5, y, 9, 0.42, { fill: C.background2 });
+    text(s, prop, { x: 0.65, y, w: 1.55, h: 0.42, fontSize: 12, bold: true, valign: "middle" });
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 2.25, y: y + 0.07, w: 1.85, h: 0.28, rectRadius: 0.06, fill: { color: C.accent2 }, line: { color: C.accent2 } });
+    text(s, value, { x: 2.25, y: y + 0.07, w: 1.85, h: 0.28, fontSize: 10.5, bold: true, color: C.background1, align: "center", valign: "middle" });
+    text(s, why, { x: 4.3, y, w: 5.1, h: 0.42, fontSize: 10.5, color: C.text2, valign: "middle" });
+  }
+  card(s, 0.5, 4.5, 9, 0.6, { fill: C.text1, line: C.text1 });
+  text(s, [
+    { text: "Agent type  ", options: { bold: true, color: C.accent2 } },
+    { text: "goal-based in chat (a fully cited answer or an honest “Not found”); a model-based learning agent in quizzes and flashcards, with a mastery score per section as its model of the student.", options: { color: C.background1 } },
+  ], { x: 0.7, y: 4.5, w: 8.6, h: 0.6, fontSize: 11, valign: "middle" });
+  s.addNotes("The task environment's properties. The key one is partial observability: the agent never sees the student's knowledge directly, so the mastery score is a belief updated from evidence. Quizzing and flashcards are sequential, because every answer changes what the agent does next.");
+
   s = syllabusSlide("Modules 1–4: agents, search, local search, logic", [
     ["M1 Introduction & Intelligent Agents", "Agent structure, environments, applications of AI", "The app is a learning agent: it perceives notes (parser, OCR) and questions, acts by answering and quizzing, and keeps a student model. The environment is partially observable (knowledge is hidden) and sequential.", "Strong"],
     ["M2 Search", "State-space search, best-first, uniform cost, A*", "Retrieval is search over a space of passages: cosine and BM25 scores order the frontier, RRF fuses the rankings, and best-first pruning keeps 25 → 15 → 5 for the costly cross-encoder.", "Strong"],
@@ -419,7 +549,7 @@ const shot = (slide, file, x, y, w, crop) => {
   const next = [
     ["LuGauge", "Bigger evaluation", "A larger, independently written question set per course, and quiz-quality ratings from students and faculty."],
     ["LuFlaskConical", "Stronger verification", "Use an entailment (NLI) model next to the lexical check, so paraphrased claims are verified too."],
-    ["LuRocket", "Better student model", "Replace the moving-average mastery with Bayesian knowledge tracing and spaced-repetition scheduling."],
+    ["LuRocket", "Better student model", "Replace the moving-average mastery with Bayesian knowledge tracing, and let flashcard reviews feed it."],
   ];
   for (const [i, [ic, head, body]] of next.entries()) {
     const x = 0.5 + i * 3.05;
@@ -432,7 +562,7 @@ const shot = (slide, file, x, y, w, crop) => {
   text(s, [
     { text: "Evaluation scale: 10 benchmark questions over 4 synthetic lecture PDFs; results need confirming on real course material.", options: { bullet: true, breakLine: true } },
     { text: "A 7B model still varies run to run: answers may cite few sentences (completion fills the gap), and two distractors can look nearly identical once rendered.", options: { bullet: true, breakLine: true } },
-    { text: "Formula OCR can misread symbols (γ̂ read as Ŷ), and the lexical page check cannot verify paraphrased claims.", options: { bullet: true } },
+    { text: "Formula OCR can misread symbols (γ̂ read as Ŷ): flashcards show the page so it can be checked, but chat still uses the parsed text. The lexical page check cannot verify paraphrased claims.", options: { bullet: true } },
   ], { x: 0.5, y: 3.95, w: 9, h: 1.15, fontSize: 11, color: C.text2, paraSpaceAfter: 4 });
   s.addNotes("Be candid: the benchmark is small and synthetic, and a 7B model is not deterministic. The next steps target exactly those gaps.");
 

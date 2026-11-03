@@ -11,5 +11,5 @@
   "latency_ms_first": 10745,
   "grounding": { "coverage_before": 0.286, "coverage_after": 1.0, "valid_before": 2, "valid_after": 6, "invalid_after": 0, "mismatch_detected": 1 },
   "quiz": { "before_evidence_ids": 0.333, "evidence_ids_no_repair": 0.667, "after": 1.0, "after_n": 9, "after_seconds": 320, "repairs": { "evidence_reselected": 2, "rationale_filled": 2 } },
-  "tests": { "backend": 289, "frontend": 56, "browser": 9, "live": 5 }
+  "tests": { "backend": 814, "frontend": 149, "browser": 14, "live": 12 }
 }
